@@ -10,6 +10,7 @@
 Стек: **React** (Vite, TypeScript) + **FastAPI** + **MCP** (официальный Python SDK, stdio) +
 **LLM через OpenRouter** (любой OpenAI-совместимый endpoint).
 
+- **Развёрнутое приложение: https://biocad.qzarov.pro**
 - Демо сценария «загрузка Excel → правка через чат → экспорт»:
   [`docs/demo.mp4`](docs/demo.mp4) (полный, 60 с) и [`docs/demo.gif`](docs/demo.gif) (ускоренный)
 - Пример входного файла: [`samples/example_plan.xlsx`](samples/example_plan.xlsx)
@@ -57,6 +58,32 @@ npm run dev                   # http://localhost:5173, /api проксирует
 ```bash
 cd backend && ./.venv/bin/python -m pytest       # 61 тест, ~3 c
 ```
+
+---
+
+## Деплой
+
+Развёрнуто на собственной VM (Ubuntu 22.04) в `/var/www/biocad-gantt`:
+`docker compose` поднимает два контейнера, порт публикуется **только на loopback**
+(`127.0.0.1:8085`), наружу отдаёт системный nginx на домене `biocad.qzarov.pro` с сертификатом
+Let's Encrypt (certbot, автопродление). В прокси-локации `/api/chat` буферизация выключена —
+иначе события хода агента доходили бы до браузера пачкой в самом конце.
+
+Требуется **Docker Compose v2**: legacy `docker-compose` 1.29 несовместим с Docker 29
+(падает при пересоздании контейнеров с томами). Плагин ставится одним файлом:
+
+```bash
+curl -sSL https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 \
+  -o /usr/libexec/docker/cli-plugins/docker-compose && chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+```
+
+Обновление на сервере:
+
+```bash
+cd /var/www/biocad-gantt && git pull && docker compose up -d --build
+```
+
+Ключ LLM живёт в `/var/www/biocad-gantt/.env` (права 600, в репозиторий не попадает).
 
 ---
 
