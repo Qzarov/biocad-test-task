@@ -1,0 +1,396 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ViewMode } from "gantt-task-react";
+import { ApiError, api, sessionId, streamChat } from "./api";
+import { ChatPanel } from "./components/ChatPanel";
+import { GanttBoard } from "./components/GanttBoard";
+import { ProjectSpine } from "./components/ProjectSpine";
+import { TaskModal } from "./components/TaskModal";
+import { daysBetween, formatDate, plural } from "./format";
+import type { ChatEntry, Health, PlanPayload } from "./types";
+
+const VIEW_MODES: { mode: ViewMode; label: string }[] = [
+  { mode: ViewMode.Day, label: "День" },
+  { mode: ViewMode.Week, label: "Неделя" },
+  { mode: ViewMode.Month, label: "Месяц" },
+];
+
+interface Notice {
+  kind: "info" | "error";
+  message: string;
+  details?: string[];
+}
+
+export default function App() {
+  const [payload, setPayload] = useState<PlanPayload | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
+  const [viewModeTouched, setViewModeTouched] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [changed, setChanged] = useState<string[]>([]);
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const abort = useRef<AbortController | null>(null);
+  const highlightTimer = useRef<number | null>(null);
+
+  const fail = useCallback((error: unknown) => {
+    if (error instanceof ApiError) {
+      setNotice({ kind: "error", message: error.message, details: error.details });
+    } else {
+      setNotice({ kind: "error", message: String(error) });
+    }
+  }, []);
+
+  const highlight = useCallback((ids: string[]) => {
+    setChanged(ids);
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setChanged([]), 7000);
+  }, []);
+
+  const run = useCallback(
+    async (action: () => Promise<PlanPayload>, options: { highlight?: boolean } = {}) => {
+      setBusy(true);
+      try {
+        const next = await action();
+        setPayload(next);
+        if (options.highlight !== false) highlight(next.changed ?? []);
+        if (next.message) setNotice({ kind: "info", message: next.message });
+        return next;
+      } catch (error) {
+        fail(error);
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [fail, highlight],
+  );
+
+  useEffect(() => {
+    api.health().then(setHealth).catch(() => setHealth(null));
+    run(() => api.plan(), { highlight: false });
+  }, [run]);
+
+  const plan = payload?.plan;
+  const schedule = payload?.schedule;
+
+  const openTask = useMemo(
+    () => plan?.tasks.find((task) => task.id === openTaskId) ?? null,
+    [plan, openTaskId],
+  );
+  const openComputed = useMemo(
+    () => schedule?.tasks.find((task) => task.id === openTaskId) ?? null,
+    [schedule, openTaskId],
+  );
+  const successors = useMemo(
+    () => plan?.tasks.filter((task) => task.predecessors.includes(openTaskId ?? "")) ?? [],
+    [plan, openTaskId],
+  );
+
+  const criticalCount = schedule?.tasks.filter((task) => task.is_critical).length ?? 0;
+  const assignees = new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean));
+  const totalDays =
+    schedule?.project_end ? daysBetween(schedule.project_start, schedule.project_end) : 0;
+
+  // A year-long plan is unreadable week by week; a two-week plan looks empty by
+  // month. So the initial zoom follows the plan, until the user picks one.
+  useEffect(() => {
+    if (viewModeTouched || !totalDays) return;
+    setViewMode(totalDays > 120 ? ViewMode.Month : ViewMode.Week);
+  }, [totalDays, viewModeTouched]);
+
+  const sendMessage = useCallback(
+    async (message: string) => {
+      const turnId = `turn-${Date.now()}`;
+      setEntries((current) => [
+        ...current,
+        { id: `${turnId}-user`, role: "user", text: message },
+        { id: turnId, role: "agent", text: "", tools: [], pending: true },
+      ]);
+      setStreaming(true);
+      setNotice(null);
+      abort.current = new AbortController();
+
+      const patch = (update: (entry: ChatEntry) => ChatEntry) =>
+        setEntries((current) => current.map((entry) => (entry.id === turnId ? update(entry) : entry)));
+
+      try {
+        await streamChat(
+          message,
+          (event) => {
+            switch (event.type) {
+              case "tool_call":
+                patch((entry) => ({
+                  ...entry,
+                  tools: [...(entry.tools ?? []), { name: event.name, args: event.arguments }],
+                }));
+                break;
+              case "tool_result":
+                patch((entry) => {
+                  const tools = [...(entry.tools ?? [])];
+                  for (let i = tools.length - 1; i >= 0; i -= 1) {
+                    if (tools[i].name === event.name && tools[i].result === undefined) {
+                      tools[i] = { ...tools[i], result: event.text, ok: event.ok };
+                      break;
+                    }
+                  }
+                  return { ...entry, tools };
+                });
+                break;
+              case "message":
+                patch((entry) => ({
+                  ...entry,
+                  text: entry.text ? `${entry.text}\n\n${event.text}` : event.text,
+                  pending: !event.final,
+                }));
+                break;
+              case "plan":
+                setPayload((current) =>
+                  current
+                    ? { ...current, plan: event.plan, schedule: event.schedule, changed: event.changed }
+                    : current,
+                );
+                highlight(event.changed);
+                break;
+              case "error":
+                setEntries((current) => [
+                  ...current.map((entry) => (entry.id === turnId ? { ...entry, pending: false } : entry)),
+                  { id: `${turnId}-error`, role: "error", text: event.text },
+                ]);
+                break;
+              case "done":
+                patch((entry) => ({ ...entry, pending: false }));
+                break;
+            }
+          },
+          abort.current.signal,
+        );
+        // resync history so undo reflects what the agent did
+        const fresh = await api.plan();
+        setPayload((current) => ({ ...fresh, changed: current?.changed ?? [] }));
+      } catch (error) {
+        if ((error as Error)?.name === "AbortError") {
+          patch((entry) => ({ ...entry, pending: false, text: entry.text || "Остановлено." }));
+        } else {
+          fail(error);
+          patch((entry) => ({ ...entry, pending: false }));
+        }
+      } finally {
+        setStreaming(false);
+        abort.current = null;
+      }
+    },
+    [fail, highlight],
+  );
+
+  return (
+    <div className="app">
+      <header className="masthead">
+        <div className="masthead__identity">
+          <div className="masthead__eyebrow">
+            <span className="label">План проекта</span>
+            <span className="label mono" style={{ letterSpacing: "0.04em" }}>
+              сессия {sessionId()}
+            </span>
+          </div>
+          <h1>{plan?.title ?? "План проекта"}</h1>
+          <div className="masthead__meta">
+            <span className="metric">
+              <span className="label">Старт</span>
+              <input
+                className="metric__value"
+                type="date"
+                value={schedule?.project_start ?? ""}
+                style={{ border: "1px solid var(--line)", borderRadius: 2, padding: "1px 4px" }}
+                onChange={(event) =>
+                  event.target.value && run(() => api.setProjectStart(event.target.value))
+                }
+                disabled={busy || streaming}
+              />
+            </span>
+            <span className="metric">
+              <span className="label">Финиш</span>
+              <span className="metric__value">{formatDate(schedule?.project_end)}</span>
+            </span>
+            <span className="metric">
+              <span className="label">Длительность</span>
+              <span className="metric__value">{totalDays ? plural(totalDays, "день", "дня", "дней") : "—"}</span>
+            </span>
+            <span className="metric">
+              <span className="label">Задач</span>
+              <span className="metric__value">{plan?.tasks.length ?? 0}</span>
+            </span>
+            <span className="metric">
+              <span className="label">Критический путь</span>
+              <span className="metric__value metric__value--critical">
+                {criticalCount ? plural(criticalCount, "задача", "задачи", "задач") : "—"}
+              </span>
+            </span>
+            <span className="metric">
+              <span className="label">Исполнителей</span>
+              <span className="metric__value">{assignees.size}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="actions">
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".xlsx"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) run(() => api.importXlsx(file), { highlight: false });
+            }}
+          />
+          <button className="btn" onClick={() => fileInput.current?.click()} disabled={busy}>
+            Загрузить Excel
+          </button>
+          <a className="btn btn--primary" href={api.exportUrl()}>
+            Скачать Excel
+          </a>
+          <button
+            className="btn"
+            onClick={() => run(() => api.undo(), { highlight: false })}
+            disabled={busy || streaming || (payload?.history?.length ?? 0) < 2}
+            title="Откатить последнюю правку"
+          >
+            Откатить
+          </button>
+          <button
+            className="btn"
+            onClick={() => {
+              setEntries([]);
+              run(() => api.reset(), { highlight: false });
+            }}
+            disabled={busy || streaming}
+          >
+            Демо-план
+          </button>
+        </div>
+
+        {schedule && <ProjectSpine schedule={schedule} />}
+      </header>
+
+      <div className="workspace">
+        <section className="chart">
+          <div className="chart__head">
+            <div>
+              {notice ? (
+                <div className={`notice${notice.kind === "error" ? " notice--error" : ""}`} style={{ margin: 0 }}>
+                  <strong>{notice.message}</strong>
+                  {notice.details && notice.details.length > 0 && (
+                    <ul>
+                      {notice.details.slice(0, 6).map((detail) => (
+                        <li key={detail}>{detail}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <span className="hint">
+                  Клик по строке — выделить, двойной клик — детали. Полоску можно тянуть по таймлайну.
+                </span>
+              )}
+            </div>
+            <div className="segmented" role="group" aria-label="Масштаб таймлайна">
+              {VIEW_MODES.map((option) => (
+                <button
+                  key={option.label}
+                  aria-pressed={viewMode === option.mode}
+                  onClick={() => {
+                    setViewMode(option.mode);
+                    setViewModeTouched(true);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {schedule ? (
+            <GanttBoard
+              schedule={schedule}
+              viewMode={viewMode}
+              changed={changed}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onOpen={(id) => {
+                setSelectedId(id);
+                setOpenTaskId(id);
+              }}
+              onDrag={(id, start, days) => {
+                const task = plan?.tasks.find((candidate) => candidate.id === id);
+                run(() =>
+                  api.patchTask(id, {
+                    start,
+                    ...(task && days !== task.duration_days ? { duration_days: days } : {}),
+                  }),
+                );
+              }}
+            />
+          ) : (
+            <div className="chart__frame">
+              <div className="chart__empty">Загружаю план…</div>
+            </div>
+          )}
+        </section>
+
+        <ChatPanel
+          entries={entries}
+          streaming={streaming}
+          health={health}
+          onSend={sendMessage}
+          onStop={() => abort.current?.abort()}
+          onClear={() => {
+            setEntries([]);
+            api.clearChat().catch(() => undefined);
+          }}
+        />
+      </div>
+
+      <footer className="statusbar">
+        <i className={`statusbar__dot${health?.llm_configured ? "" : " statusbar__dot--off"}`} />
+        <span>
+          {health?.llm_configured
+            ? `LLM: ${health.model} через MCP-инструменты`
+            : "LLM не настроен — чат недоступен"}
+        </span>
+        <span className="statusbar__spacer" />
+        {payload?.history?.length ? (
+          <span>
+            История: {payload.history.length} шаг(ов), текущий —{" "}
+            {payload.history.find((item) => item.is_current)?.label ?? "—"}
+          </span>
+        ) : null}
+        {schedule?.warnings?.length ? <span>Предупреждений: {schedule.warnings.length}</span> : null}
+      </footer>
+
+      {openTask && openComputed && (
+        <TaskModal
+          task={openTask}
+          computed={openComputed}
+          allTasks={plan?.tasks ?? []}
+          successors={successors}
+          busy={busy}
+          onClose={() => setOpenTaskId(null)}
+          onSave={async (patch) => {
+            const next = await run(() => api.patchTask(openTask.id, patch));
+            if (next) setOpenTaskId(null);
+          }}
+          onDelete={async () => {
+            const next = await run(() => api.deleteTask(openTask.id));
+            if (next) setOpenTaskId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
