@@ -26,7 +26,8 @@ cp .env.example .env          # и вписать OPENROUTER_API_KEY
 docker compose up --build
 ```
 
-Приложение — на http://localhost:8080. nginx отдаёт статику и проксирует `/api` на бэкенд
+Приложение — на http://localhost:8080 (контейнер слушает loopback; для публикации наружу
+без прокси задайте `BIND_HOST=0.0.0.0`). nginx отдаёт статику и проксирует `/api` на бэкенд
 (тот же origin, поэтому CORS в продовой сборке не нужен). План хранится в томе `plan-data`.
 
 ### Локально

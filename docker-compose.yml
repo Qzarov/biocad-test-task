@@ -25,7 +25,10 @@ services:
     depends_on:
       - backend
     ports:
-      - "${PORT:-8080}:80"
+      # Bound to loopback by default: behind a reverse proxy the app must not be
+      # reachable on the public interface without TLS. Set BIND_HOST=0.0.0.0 to
+      # publish it directly (local development, no proxy in front).
+      - "${BIND_HOST:-127.0.0.1}:${PORT:-8080}:80"
 
 volumes:
   plan-data:
