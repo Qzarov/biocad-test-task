@@ -4,14 +4,16 @@ import "gantt-task-react/dist/index.css";
 import type { ScheduledTask, Schedule } from "../types";
 import { formatDate } from "../format";
 
+// Frox palette (tokens live in styles/frox-tokens.css; the library needs plain
+// colour strings, so the four semantic values are mirrored here).
 const COLORS = {
-  normal: { bar: "#0d7d7a", progress: "#0a5f5c" },
-  critical: { bar: "#c3145f", progress: "#9a0f4b" },
-  pinned: { bar: "#c07f00", progress: "#9a6600" },
-  changed: { bar: "#0e1b24", progress: "#0e1b24" },
+  critical: { bar: "#3cb043", progress: "#228B22" },
+  normal: { bar: "#5b6172", progress: "#464b59" },
+  pinned: { bar: "#f59e0b", progress: "#c27a06" },
+  changed: { bar: "#50d1b2", progress: "#2fa78a" },
 };
 
-const LIST_WIDTH = "392px";
+const LIST_WIDTH = "430px";
 
 interface Props {
   schedule: Schedule;
@@ -88,8 +90,10 @@ export function GanttBoard({
       <div className="chart__frame">
         <div className="chart__empty">
           <div>
-            <p style={{ margin: "0 0 6px", fontWeight: 600 }}>В плане нет задач</p>
-            <p style={{ margin: 0 }}>Загрузите Excel или попросите агента добавить первую задачу.</p>
+            <strong>В плане нет задач</strong>
+            <span className="hint">
+              Загрузите Excel или попросите агента добавить первую задачу.
+            </span>
           </div>
         </div>
       </div>
@@ -143,13 +147,19 @@ export function GanttBoard({
           >
             <span className="gantt-row__name">
               <i
-                className={`gantt-row__flag${task?.is_critical ? " gantt-row__flag--critical" : ""}`}
-                style={task?.is_pinned && !task?.is_critical ? { background: "var(--amber)" } : undefined}
+                className={
+                  "gantt-row__flag" +
+                  (task?.is_critical
+                    ? " gantt-row__flag--critical"
+                    : task?.is_pinned
+                      ? " gantt-row__flag--pinned"
+                      : "")
+                }
               />
               <span className="gantt-row__title">{row.name}</span>
             </span>
             <span className="gantt-row__assignee">{task?.assignee || "—"}</span>
-            <span className="gantt-row__days mono">{task?.duration_days ?? "—"}</span>
+            <span className="gantt-row__days num">{task?.duration_days ?? "—"}</span>
           </div>
         );
       })}
@@ -199,10 +209,10 @@ export function GanttBoard({
         barCornerRadius={2}
         barFill={62}
         handleWidth={7}
-        arrowColor="#8ba3af"
+        arrowColor="#5b5f70"
         arrowIndent={18}
-        todayColor="rgba(13, 125, 122, 0.09)"
-        fontFamily='"IBM Plex Sans", system-ui, sans-serif'
+        todayColor="rgba(34, 139, 34, 0.10)"
+        fontFamily='"Noto Sans", system-ui, sans-serif'
         fontSize="12.5px"
         ganttHeight={Math.max(240, height - 44)}
         TaskListHeader={TaskListHeader}

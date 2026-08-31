@@ -50,7 +50,7 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
               x2={month.at}
               y1={0}
               y2={height}
-              stroke="var(--line)"
+              stroke="var(--border)"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />
@@ -69,9 +69,13 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
                 height={laneHeight}
                 rx={1}
                 fill={
-                  task.is_critical ? "var(--magenta)" : task.is_pinned ? "var(--amber)" : "var(--teal)"
+                  task.is_critical
+                    ? "var(--plan-critical)"
+                    : task.is_pinned
+                      ? "var(--plan-pinned)"
+                      : "var(--plan-normal)"
                 }
-                opacity={task.is_critical ? 0.95 : 0.72}
+                opacity={task.is_critical ? 1 : 0.85}
               />
             );
           })}
@@ -82,7 +86,7 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
               x2={today}
               y1={-2}
               y2={height + 3}
-              stroke="var(--ink)"
+              stroke="var(--text-primary)"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
@@ -91,13 +95,13 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
       </div>
       <div className="spine__legend">
         <span className="legend-item">
-          <i className="legend-swatch" style={{ background: "var(--magenta)" }} /> критический путь
+          <i className="legend-swatch" style={{ background: "var(--plan-critical)" }} /> критический путь
         </span>
         <span className="legend-item">
-          <i className="legend-swatch" style={{ background: "var(--teal)" }} /> с запасом
+          <i className="legend-swatch" style={{ background: "var(--plan-normal)" }} /> с запасом
         </span>
         <span className="legend-item">
-          <i className="legend-swatch" style={{ background: "var(--amber)" }} /> дата закреплена
+          <i className="legend-swatch" style={{ background: "var(--plan-pinned)" }} /> дата закреплена
         </span>
       </div>
     </div>

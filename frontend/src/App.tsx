@@ -192,20 +192,17 @@ export default function App() {
       <header className="masthead">
         <div className="masthead__identity">
           <div className="masthead__eyebrow">
-            <span className="label">План проекта</span>
-            <span className="label mono" style={{ letterSpacing: "0.04em" }}>
-              сессия {sessionId()}
-            </span>
+            <span>План проекта</span>
+            <span className="num">сессия {sessionId()}</span>
           </div>
           <h1>{plan?.title ?? "План проекта"}</h1>
           <div className="masthead__meta">
             <span className="metric">
-              <span className="label">Старт</span>
+              <span className="metric__label">Старт</span>
               <input
-                className="metric__value"
+                className="metric__date"
                 type="date"
                 value={schedule?.project_start ?? ""}
-                style={{ border: "1px solid var(--line)", borderRadius: 2, padding: "1px 4px" }}
                 onChange={(event) =>
                   event.target.value && run(() => api.setProjectStart(event.target.value))
                 }
@@ -213,25 +210,25 @@ export default function App() {
               />
             </span>
             <span className="metric">
-              <span className="label">Финиш</span>
+              <span className="metric__label">Финиш</span>
               <span className="metric__value">{formatDate(schedule?.project_end)}</span>
             </span>
             <span className="metric">
-              <span className="label">Длительность</span>
+              <span className="metric__label">Длительность</span>
               <span className="metric__value">{totalDays ? plural(totalDays, "день", "дня", "дней") : "—"}</span>
             </span>
             <span className="metric">
-              <span className="label">Задач</span>
+              <span className="metric__label">Задач</span>
               <span className="metric__value">{plan?.tasks.length ?? 0}</span>
             </span>
             <span className="metric">
-              <span className="label">Критический путь</span>
+              <span className="metric__label">Критический путь</span>
               <span className="metric__value metric__value--critical">
                 {criticalCount ? plural(criticalCount, "задача", "задачи", "задач") : "—"}
               </span>
             </span>
             <span className="metric">
-              <span className="label">Исполнителей</span>
+              <span className="metric__label">Исполнителей</span>
               <span className="metric__value">{assignees.size}</span>
             </span>
           </div>
@@ -249,14 +246,18 @@ export default function App() {
               if (file) run(() => api.importXlsx(file), { highlight: false });
             }}
           />
-          <button className="btn" onClick={() => fileInput.current?.click()} disabled={busy}>
+          <button
+            className="frox-btn frox-btn-outline"
+            onClick={() => fileInput.current?.click()}
+            disabled={busy}
+          >
             Загрузить Excel
           </button>
-          <a className="btn btn--primary" href={api.exportUrl()}>
+          <a className="frox-btn frox-btn-brand" href={api.exportUrl()}>
             Скачать Excel
           </a>
           <button
-            className="btn"
+            className="frox-btn frox-btn-outline"
             onClick={() => run(() => api.undo(), { highlight: false })}
             disabled={busy || streaming || (payload?.history?.length ?? 0) < 2}
             title="Откатить последнюю правку"
@@ -264,7 +265,7 @@ export default function App() {
             Откатить
           </button>
           <button
-            className="btn"
+            className="frox-btn frox-btn-outline"
             onClick={() => {
               setEntries([]);
               run(() => api.reset(), { highlight: false });
@@ -299,10 +300,11 @@ export default function App() {
                 </span>
               )}
             </div>
-            <div className="segmented" role="group" aria-label="Масштаб таймлайна">
+            <div className="frox-tabs" role="group" aria-label="Масштаб таймлайна">
               {VIEW_MODES.map((option) => (
                 <button
                   key={option.label}
+                  className={`frox-tab${viewMode === option.mode ? " frox-tab-active" : ""}`}
                   aria-pressed={viewMode === option.mode}
                   onClick={() => {
                     setViewMode(option.mode);
@@ -338,7 +340,9 @@ export default function App() {
             />
           ) : (
             <div className="chart__frame">
-              <div className="chart__empty">Загружаю план…</div>
+              <div className="chart__empty">
+                <span className="hint">Загружаю план…</span>
+              </div>
             </div>
           )}
         </section>

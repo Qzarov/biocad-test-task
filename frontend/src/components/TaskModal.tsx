@@ -85,7 +85,7 @@ export function TaskModal({
       <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
         <header className="modal__head">
           <div>
-            <span className="modal__id mono">{task.id}</span>
+            <span className="modal__id num">{task.id}</span>
             <h2 className="modal__title">{task.name}</h2>
             <div className="chips">
               {computed.is_critical ? (
@@ -97,7 +97,7 @@ export function TaskModal({
               {computed.progress > 0 && <span className="chip">готово {computed.progress}%</span>}
             </div>
           </div>
-          <button className="btn btn--ghost btn--sm" onClick={onClose}>
+          <button className="frox-btn frox-btn-outline frox-btn-sm" onClick={onClose}>
             Закрыть
           </button>
         </header>
@@ -105,70 +105,79 @@ export function TaskModal({
         <div className="modal__body">
           <div className="readout">
             <div className="readout__item">
-              <span className="label">Начало</span>
+              <span className="readout__label">Начало</span>
               <span className="readout__value">{formatDate(computed.start)}</span>
             </div>
             <div className="readout__item">
-              <span className="label">Окончание</span>
+              <span className="readout__label">Окончание</span>
               <span className="readout__value">{formatDate(computed.end)}</span>
             </div>
             <div className="readout__item">
-              <span className="label">Длительность</span>
+              <span className="readout__label">Длительность</span>
               <span className="readout__value">{computed.duration_days} дн.</span>
             </div>
             <div className="readout__item">
-              <span className="label">Запас</span>
+              <span className="readout__label">Запас</span>
               <span className="readout__value">{computed.is_critical ? "0" : computed.slack_days}</span>
             </div>
           </div>
 
-          <div className="field">
-            <label className="label" htmlFor="task-name">
+          <div className="frox-field">
+            <label className="frox-field-label" htmlFor="task-name">
               Название
             </label>
-            <input id="task-name" value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              id="task-name"
+              className="frox-input"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </div>
 
-          <div className="field">
-            <label className="label" htmlFor="task-description">
+          <div className="frox-field">
+            <label className="frox-field-label" htmlFor="task-description">
               Описание
             </label>
             <textarea
               id="task-description"
+              className="frox-textarea"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
 
-          <div className="field--row">
-            <div className="field">
-              <label className="label" htmlFor="task-assignee">
+          <div className="field-row">
+            <div className="frox-field">
+              <label className="frox-field-label" htmlFor="task-assignee">
                 Исполнитель
               </label>
               <input
                 id="task-assignee"
+                className="frox-input"
                 value={assignee}
                 onChange={(event) => setAssignee(event.target.value)}
               />
             </div>
-            <div className="field">
-              <label className="label" htmlFor="task-duration">
+            <div className="frox-field">
+              <label className="frox-field-label" htmlFor="task-duration">
                 Длительность, дн.
               </label>
               <input
                 id="task-duration"
+                className="frox-input"
                 type="number"
                 min={1}
                 value={duration}
                 onChange={(event) => setDuration(event.target.value)}
               />
             </div>
-            <div className="field">
-              <label className="label" htmlFor="task-progress">
+            <div className="frox-field">
+              <label className="frox-field-label" htmlFor="task-progress">
                 Прогресс, %
               </label>
               <input
                 id="task-progress"
+                className="frox-input"
                 type="number"
                 min={0}
                 max={100}
@@ -176,12 +185,13 @@ export function TaskModal({
                 onChange={(event) => setProgress(event.target.value)}
               />
             </div>
-            <div className="field">
-              <label className="label" htmlFor="task-pin">
+            <div className="frox-field">
+              <label className="frox-field-label" htmlFor="task-pin">
                 Не раньше
               </label>
               <input
                 id="task-pin"
+                className="frox-input"
                 type="date"
                 value={pin}
                 onChange={(event) => setPin(event.target.value)}
@@ -189,13 +199,14 @@ export function TaskModal({
             </div>
           </div>
 
-          <div className="field">
-            <span className="label">Предшественники</span>
+          <div className="frox-field">
+            <span className="frox-field-label">Предшественники</span>
             <div className="deps">
               {candidates.length === 0 && <span className="hint">Других задач в плане нет</span>}
               {candidates.map((candidate) => (
-                <label key={candidate.id}>
+                <label key={candidate.id} className="frox-toggle-label">
                   <input
+                    className="frox-checkbox"
                     type="checkbox"
                     checked={predecessors.includes(candidate.id)}
                     onChange={(event) =>
@@ -212,8 +223,8 @@ export function TaskModal({
             </div>
           </div>
 
-          <div className="field">
-            <span className="label">Зависят от этой задачи</span>
+          <div className="frox-field">
+            <span className="frox-field-label">Зависят от этой задачи</span>
             {successors.length ? (
               <div className="linkrow">
                 {successors.map((successor) => (
@@ -229,14 +240,18 @@ export function TaskModal({
         </div>
 
         <footer className="modal__foot">
-          <button className="btn btn--danger" onClick={onDelete} disabled={busy}>
+          <button
+            className="frox-btn frox-btn-outline frox-btn-danger"
+            onClick={onDelete}
+            disabled={busy}
+          >
             Удалить задачу
           </button>
           <div className="modal__foot-right">
-            <button className="btn" onClick={onClose} disabled={busy}>
+            <button className="frox-btn frox-btn-outline" onClick={onClose} disabled={busy}>
               Отмена
             </button>
-            <button className="btn btn--primary" onClick={save} disabled={busy || !dirty}>
+            <button className="frox-btn frox-btn-brand" onClick={save} disabled={busy || !dirty}>
               {busy ? "Сохраняю…" : "Сохранить"}
             </button>
           </div>

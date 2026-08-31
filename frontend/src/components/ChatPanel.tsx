@@ -50,12 +50,16 @@ export function ChatPanel({ entries, streaming, health, onSend, onStop, onClear 
     <section className="chat" aria-label="Чат с агентом-планировщиком">
       <header className="chat__head">
         <div>
-          <span className="label">Агент плана</span>
+          <div className="chat__title">Агент плана</div>
           <div className="chat__model">
             {health?.llm_configured ? health.model : "модель не настроена"}
           </div>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={onClear} disabled={streaming}>
+        <button
+          className="frox-btn frox-btn-outline frox-btn-sm"
+          onClick={onClear}
+          disabled={streaming}
+        >
           Очистить
         </button>
       </header>
@@ -113,6 +117,7 @@ export function ChatPanel({ entries, streaming, health, onSend, onStop, onClear 
 
       <div className="chat__composer">
         <textarea
+          className="frox-textarea"
           value={draft}
           placeholder="Например: сдвинь всё после трансфера процесса на две недели"
           onChange={(event) => setDraft(event.target.value)}
@@ -127,12 +132,12 @@ export function ChatPanel({ entries, streaming, health, onSend, onStop, onClear 
         <div className="chat__composer-row">
           <span className="hint">Ctrl/⌘ + Enter — отправить</span>
           {streaming ? (
-            <button className="btn btn--danger" onClick={onStop}>
+            <button className="frox-btn frox-btn-outline frox-btn-danger" onClick={onStop}>
               Остановить
             </button>
           ) : (
             <button
-              className="btn btn--primary"
+              className="frox-btn frox-btn-brand"
               onClick={send}
               disabled={!draft.trim() || (health ? !health.llm_configured : false)}
             >
@@ -156,7 +161,7 @@ function ToolCard({ tool }: { tool: ToolTrace }) {
     <div className={`tool${state === "failed" ? " tool--failed" : ""}${state === "running" ? " tool--running" : ""}`}>
       <div className="tool__name">
         <span>{tool.name}</span>
-        <span className="label" style={{ letterSpacing: "0.06em" }}>
+        <span className="tool__state">
           {state === "running" ? "выполняется" : TOOL_LABELS[tool.name] ?? "инструмент"}
         </span>
       </div>
