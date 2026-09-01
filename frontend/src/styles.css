@@ -1091,6 +1091,7 @@ body.is-dragging-row * {
 }
 
 .chat__intro {
+  flex: none;
   padding: 14px;
   background: var(--bg-surface-alt);
   border: 1px solid var(--border);
@@ -1132,6 +1133,9 @@ body.is-dragging-row * {
 }
 
 .turn {
+  /* .chat__log — flex-колонка с прокруткой: без запрета сжатия длинные ходы
+     ужимались бы, а не прокручивались */
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
