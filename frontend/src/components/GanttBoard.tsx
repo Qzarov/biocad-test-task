@@ -32,6 +32,7 @@ interface Props {
   columnWidth: number;
   columns: ColumnKey[];
   columnWidths: ColumnWidths;
+  numbers: Record<string, number>;
   onColumnWidth: (key: ColumnKey | "name", width: number | null) => void;
   changed: string[];
   selectedId: string | null;
@@ -49,6 +50,7 @@ export function GanttBoard({
   columnWidth,
   columns,
   columnWidths,
+  numbers,
   onColumnWidth,
   changed,
   selectedId,
@@ -289,6 +291,9 @@ export function GanttBoard({
             }}
           >
             <span className="gantt-row__name">
+              <span className="gantt-row__num num" title="Номер задачи — на него можно ссылаться в чате">
+                {numbers[row.id] ?? "—"}
+              </span>
               <GripVertical
                 className="gantt-row__grip"
                 size={14}

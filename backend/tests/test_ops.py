@@ -180,3 +180,22 @@ def test_reorder_task_onto_itself_is_a_no_op():
     plan, msg = ops.reorder_task(base_plan(), "analiz", before="analiz")
     assert [t.id for t in plan.tasks] == ["analiz", "dizayn", "verstka"]
     assert "уже" in msg
+
+
+def test_resolve_task_by_row_number():
+    plan = base_plan()
+    assert ops.resolve_task(plan, "#2").id == "dizayn"
+    assert ops.resolve_task(plan, "3").id == "verstka"
+    assert ops.resolve_task(plan, "# 1").id == "analiz"
+
+
+def test_resolve_task_reports_number_out_of_range():
+    with pytest.raises(ops.OpError) as err:
+        ops.resolve_task(base_plan(), "#9")
+    assert "9" in str(err.value)
+
+
+def test_task_id_wins_over_number_lookalike():
+    plan = base_plan()
+    plan.tasks.append(Task(id="2026", name="Бюджет 2026", duration_days=1))
+    assert ops.resolve_task(plan, "2026").id == "2026"

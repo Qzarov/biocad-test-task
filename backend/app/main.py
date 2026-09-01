@@ -23,7 +23,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import ops
-from .agent.loop import memory, run_turn
+from .agent.loop import run_turn, transcript
 from .config import settings
 from .excel_io import ExcelImportError, meta_from_xlsx, plan_from_xlsx, plan_to_xlsx
 from .models import Plan, PlanError
@@ -173,7 +173,7 @@ def reset_plan(
     sid = resolve_session(session_id, x_session_id)
     plan = seed_plan()
     store.reset(sid, plan, "демо-план")
-    memory.clear(sid)
+    store.clear_chat(sid)
     return plan_payload(sid, plan)
 
 
@@ -224,7 +224,7 @@ async def import_plan(
         )
 
     store.reset(sid, plan, f"импорт {file.filename or 'файла'}")
-    memory.clear(sid)
+    store.clear_chat(sid)
     payload = plan_payload(sid, plan)
     payload["message"] = f"Загружено задач: {len(plan.tasks)}"
     return payload
@@ -397,10 +397,20 @@ async def chat(
     )
 
 
+@app.get("/api/chat/history")
+def chat_history(
+    session_id: Optional[str] = Query(None),
+    x_session_id: Optional[str] = Header(None),
+) -> dict[str, Any]:
+    """Переписка для восстановления чата после перезагрузки страницы."""
+    sid = resolve_session(session_id, x_session_id)
+    return {"session_id": sid, "entries": transcript(store, sid)}
+
+
 @app.post("/api/chat/clear")
 def clear_chat(
     session_id: Optional[str] = Query(None),
     x_session_id: Optional[str] = Header(None),
 ) -> dict[str, bool]:
-    memory.clear(resolve_session(session_id, x_session_id))
+    store.clear_chat(resolve_session(session_id, x_session_id))
     return {"ok": True}

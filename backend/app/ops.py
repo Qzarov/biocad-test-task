@@ -13,6 +13,7 @@ reference is ambiguous.
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from typing import Optional
 
@@ -43,7 +44,12 @@ def _validate(plan: Plan) -> Plan:
 
 
 def resolve_task(plan: Plan, ref: str) -> Task:
-    """Find a task by id, exact name, or unambiguous substring of its name."""
+    """Найти задачу по id, номеру строки (#5), точному названию или подстроке.
+
+    Номер — это позиция в списке, ровно та, что видна в интерфейсе; при
+    переупорядочивании он меняется, поэтому годится как ссылка «здесь и сейчас»,
+    а не как долговременный идентификатор.
+    """
     needle = (ref or "").strip()
     if not needle:
         raise OpError("Не указана задача")
@@ -51,6 +57,15 @@ def resolve_task(plan: Plan, ref: str) -> Task:
     exact_id = plan.task_by_id(needle)
     if exact_id:
         return exact_id
+
+    number = re.fullmatch(r"#?\s*(\d{1,4})", needle)
+    if number:
+        position = int(number.group(1))
+        if 1 <= position <= len(plan.tasks):
+            return plan.tasks[position - 1]
+        raise OpError(
+            f"В плане {len(plan.tasks)} задач, номера {position} нет"
+        )
 
     lowered = needle.lower()
     by_name = [t for t in plan.tasks if t.name.strip().lower() == lowered]

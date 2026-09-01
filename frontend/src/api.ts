@@ -1,4 +1,11 @@
-import type { ApiFailure, ChatEvent, Health, ModelsResponse, PlanPayload } from "./types";
+import type {
+  ApiFailure,
+  ChatEvent,
+  ChatHistoryResponse,
+  Health,
+  ModelsResponse,
+  PlanPayload,
+} from "./types";
 
 const BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/$/, "");
 const SESSION_KEY = "gantt-agent-session";
@@ -96,6 +103,7 @@ export const api = {
   setProjectStart: (start: string) =>
     request<PlanPayload>("/plan/project-start", { method: "POST", body: JSON.stringify({ start }) }),
 
+  chatHistory: () => request<ChatHistoryResponse>("/chat/history"),
   clearChat: () => request<{ ok: boolean }>("/chat/clear", { method: "POST" }),
 };
 

@@ -73,6 +73,20 @@ export interface ToolTrace {
   ok?: boolean;
 }
 
+export interface ChatHistoryResponse {
+  session_id: string;
+  entries: { role: "user" | "agent"; text: string; tools: ToolTrace[] }[];
+}
+
+/** Пункт для @-меню: задача (с номером) или исполнитель. */
+export interface Mention {
+  kind: "task" | "person";
+  label: string;
+  hint: string;
+  insert: string;
+  number?: number;
+}
+
 export interface ChatEntry {
   id: string;
   role: "user" | "agent" | "error";

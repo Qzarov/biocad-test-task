@@ -174,7 +174,7 @@ class FakeLLM:
 def test_chat_turn_streams_tool_calls_and_the_updated_plan(sid, monkeypatch):
     fake = FakeLLM()
     monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", lambda *a, **kw: fake)
-    agent_loop.memory.clear(sid)
+    main.store.clear_chat(sid)
     client.get("/api/plan", params={"session_id": sid})
 
     with client.stream(
@@ -230,7 +230,7 @@ def test_chat_reports_a_failing_tool_without_breaking_the_stream(sid, monkeypatc
             return {"role": "assistant", "content": "Такой задачи в плане нет."}
 
     monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", lambda *a, **kw: BadToolLLM())
-    agent_loop.memory.clear(sid)
+    main.store.clear_chat(sid)
     client.get("/api/plan", params={"session_id": sid})
 
     with client.stream(
@@ -252,7 +252,7 @@ def test_chat_surfaces_a_missing_api_key_as_an_error_event(sid, monkeypatch):
             raise LLMError("LLM не настроен: задайте OPENROUTER_API_KEY")
 
     monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", lambda *a, **kw: DeadLLM())
-    agent_loop.memory.clear(sid)
+    main.store.clear_chat(sid)
 
     with client.stream(
         "POST", "/api/chat", json={"message": "привет", "session_id": sid}
@@ -311,7 +311,7 @@ def test_chat_passes_the_selected_model_to_the_llm(sid, monkeypatch):
             return {"role": "assistant", "content": "готово"}
 
     monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", RecordingLLM)
-    agent_loop.memory.clear(sid)
+    main.store.clear_chat(sid)
 
     with client.stream(
         "POST", "/api/chat", json={"message": "привет", "session_id": sid, "model": picked}
@@ -342,3 +342,80 @@ def test_reorder_endpoint_rejects_unknown_anchor(sid):
         "/api/plan/tasks/dossier/reorder", params={"session_id": sid}, json={"after": "нет-такой"}
     )
     assert response.status_code == 400
+
+
+def test_chat_history_survives_and_groups_tool_calls(sid, monkeypatch):
+    fake = FakeLLM()
+    monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", lambda *a, **kw: fake)
+    client.get("/api/plan", params={"session_id": sid})
+    assert client.get("/api/chat/history", params={"session_id": sid}).json()["entries"] == []
+
+    with client.stream(
+        "POST",
+        "/api/chat",
+        json={"message": "переназначь задачи Егоровой М. на Иванова И.", "session_id": sid},
+    ) as response:
+        response.read()
+
+    entries = client.get("/api/chat/history", params={"session_id": sid}).json()["entries"]
+    # один ход агента — одна карточка, как в живом стриме
+    assert [e["role"] for e in entries] == ["user", "agent"]
+    assert entries[0]["text"].startswith("переназначь")
+    # вызов инструмента подклеен к ходу агента вместе с результатом
+    call = entries[1]["tools"][0]
+    assert call["name"] == "reassign_tasks"
+    assert call["args"]["to_assignee"] == "Иванов И."
+    assert call["ok"] is True and "Переназначено" in call["result"]
+    assert entries[1]["text"].startswith("Переназначил")
+
+
+def test_chat_history_is_cleared_on_demand(sid, monkeypatch):
+    monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", lambda *a, **kw: FakeLLM())
+    client.get("/api/plan", params={"session_id": sid})
+    with client.stream("POST", "/api/chat", json={"message": "привет", "session_id": sid}) as r:
+        r.read()
+    assert client.get("/api/chat/history", params={"session_id": sid}).json()["entries"]
+
+    client.post("/api/chat/clear", params={"session_id": sid})
+    assert client.get("/api/chat/history", params={"session_id": sid}).json()["entries"] == []
+
+
+def test_agent_understands_a_task_number(sid, monkeypatch):
+    """Пользователь пишет «#3», модель передаёт номер в инструмент как есть."""
+    class NumberLLM:
+        def __init__(self, *a, **kw):
+            self.step = 0
+
+        async def complete(self, messages, tools):
+            self.step += 1
+            if self.step == 1:
+                assert "#3" in messages[0]["content"], "номера должны быть в промпте"
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "c1",
+                            "type": "function",
+                            "function": {
+                                "name": "shift_task",
+                                "arguments": json.dumps({"task": "#3", "days": 2}),
+                            },
+                        }
+                    ],
+                }
+            return {"role": "assistant", "content": "сдвинул третью задачу"}
+
+    monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", NumberLLM)
+    client.post("/api/plan/reset", params={"session_id": sid})
+
+    with client.stream(
+        "POST", "/api/chat", json={"message": "сдвинь #3 на 2 дня", "session_id": sid}
+    ) as response:
+        response.read()
+        events = sse_events(response)
+
+    result = next(e for e in events if e["type"] == "tool_result")
+    assert result["ok"] is True
+    # третья задача демо-плана — «Отработка downstream-процесса»
+    assert "downstream" in result["text"]

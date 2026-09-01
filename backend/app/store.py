@@ -18,7 +18,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .models import Plan
 
@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS snapshots (
     created_at  TEXT NOT NULL,
     PRIMARY KEY (session_id, seq)
 );
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL,
+    payload     TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chat_messages_session
+    ON chat_messages (session_id, id);
 """
 
 
@@ -160,6 +168,49 @@ class PlanStore:
             }
             for r in rows
         ]
+
+    # --- chat history -----------------------------------------------------
+    #
+    # Переписка лежит рядом с планом, а не в памяти процесса: иначе обновление
+    # страницы (или рестарт бэкенда) теряло бы контекст разговора. Храним ровно
+    # те сообщения, которые уходят в LLM, — из них же собирается транскрипт для
+    # интерфейса, так что двух источников правды нет.
+
+    def append_chat(self, session_id: str, messages: list[dict[str, Any]]) -> None:
+        if not messages:
+            return
+        now = _now()
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT INTO chat_messages (session_id, payload, created_at) VALUES (?, ?, ?)",
+                [(session_id, json.dumps(message, ensure_ascii=False), now) for message in messages],
+            )
+
+    def chat_messages(self, session_id: str, limit: Optional[int] = None) -> list[dict[str, Any]]:
+        """Сообщения по возрастанию времени. `limit` берёт последние N."""
+        with self._conn() as conn:
+            if limit is None:
+                rows = conn.execute(
+                    "SELECT payload FROM chat_messages WHERE session_id = ? ORDER BY id",
+                    (session_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT payload FROM chat_messages WHERE session_id = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (session_id, limit),
+                ).fetchall()
+                rows = list(reversed(rows))
+        messages = [json.loads(row["payload"]) for row in rows]
+        # история не должна начинаться с результата инструмента: без своего
+        # вызова он ломает запрос к модели
+        while messages and messages[0].get("role") == "tool":
+            messages = messages[1:]
+        return messages
+
+    def clear_chat(self, session_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
 
     def reset(self, session_id: str, plan: Plan, label: str = "план загружен") -> None:
         """Drop the history and start over from `plan` (used by Excel import)."""

@@ -69,9 +69,10 @@ def get_plan() -> str:
     lines = [
         f"Старт проекта: {schedule.project_start.isoformat()}; "
         f"окончание: {schedule.project_end.isoformat() if schedule.project_end else '—'}; "
-        f"задач: {len(schedule.tasks)}"
+        f"задач: {len(schedule.tasks)}",
+        "Номер (#N) — позиция в списке, на него тоже можно ссылаться в аргументах.",
     ]
-    for t in schedule.tasks:
+    for index, t in enumerate(schedule.tasks, start=1):
         preds = ", ".join(names.get(p, p) for p in t.predecessors) or "—"
         flags = []
         if t.is_critical:
@@ -79,7 +80,7 @@ def get_plan() -> str:
         if t.is_pinned:
             flags.append("дата закреплена")
         lines.append(
-            f"- {t.id} | {t.name} | исполнитель: {t.assignee or '—'} | {t.duration_days} дн. | "
+            f"- #{index} | {t.id} | {t.name} | исполнитель: {t.assignee or '—'} | {t.duration_days} дн. | "
             f"{t.start.isoformat()}..{t.end.isoformat()} | запас {t.slack_days} дн. | "
             f"предшественники: {preds}" + (f" | {'; '.join(flags)}" if flags else "")
         )

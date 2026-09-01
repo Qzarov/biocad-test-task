@@ -31,37 +31,66 @@ SYSTEM_PROMPT = """Ты — ассистент-планировщик проек
 - Даты — формат ГГГГ-ММ-ДД. Длительности — целые календарные дни.
 - Зависимости всегда приоритетнее фиксации даты: задача не может начаться раньше, чем закончатся её предшественники.
 - В конце коротко (1–3 предложения) отчитайся, что именно изменилось. Без Markdown-таблиц и без списка всего плана.
+- Пользователь может ссылаться на задачу номером из списка («#5», «пятая») и на исполнителя через «@Имя» — это одно и то же, что название задачи или имя человека, инструменты понимают и номер, и название.
 - Отвечай на языке пользователя.
 - Если запрос неоднозначен настолько, что можно испортить план (например, непонятно, какую из двух похожих задач двигать), задай один уточняющий вопрос вместо правки."""
 
 
-class ChatMemory:
-    """Per-session conversation history, in process memory.
+def load_history(store: PlanStore, session_id: str) -> list[dict[str, Any]]:
+    """Последние сообщения диалога для контекста модели.
 
-    Single-instance by design: this is a demo, and the plan itself (the thing
-    worth keeping) lives in SQLite. Moving history into the store is listed in
-    the roadmap.
+    Ограничение — по числу сообщений: длинная переписка иначе съедает окно
+    контекста и деньги, а для правки плана важны последние ходы.
     """
-
-    def __init__(self, limit: int = 40) -> None:
-        self._limit = limit
-        self._sessions: dict[str, list[dict[str, Any]]] = {}
-
-    def get(self, session_id: str) -> list[dict[str, Any]]:
-        return list(self._sessions.get(session_id, []))
-
-    def set(self, session_id: str, messages: list[dict[str, Any]]) -> None:
-        trimmed = messages[-self._limit :]
-        # never start the stored history with an orphaned tool result
-        while trimmed and trimmed[0].get("role") == "tool":
-            trimmed = trimmed[1:]
-        self._sessions[session_id] = trimmed
-
-    def clear(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
+    return store.chat_messages(session_id, limit=settings.history_limit)
 
 
-memory = ChatMemory(limit=settings.history_limit)
+def transcript(store: PlanStore, session_id: str) -> list[dict[str, Any]]:
+    """Собрать переписку для интерфейса из тех же сообщений, что уходят в LLM.
+
+    Одно хранилище на два потребителя: иначе транскрипт и контекст модели со
+    временем разъедутся. Вызовы инструментов подклеиваются к ходу агента, их
+    результаты — к соответствующему вызову.
+    """
+    entries: list[dict[str, Any]] = []
+    pending: dict[str, dict[str, Any]] = {}
+
+    for message in store.chat_messages(session_id):
+        role = message.get("role")
+        if role == "user":
+            entries.append({"role": "user", "text": message.get("content") or "", "tools": []})
+            pending = {}
+        elif role == "assistant":
+            # Один ход агента — одна карточка в чате, как и в живом стриме: модель
+            # внутри хода может ответить несколько раз (вызовы инструментов, потом
+            # текст), но для человека это по-прежнему один ответ.
+            text = message.get("content") or ""
+            if entries and entries[-1]["role"] == "agent":
+                entry = entries[-1]
+                if text:
+                    entry["text"] = f"{entry['text']}\n\n{text}" if entry["text"] else text
+            else:
+                entry = {"role": "agent", "text": text, "tools": []}
+                entries.append(entry)
+            pending = {}
+            for call in message.get("tool_calls") or []:
+                function = call.get("function", {})
+                try:
+                    args = json.loads(function.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                tool = {"name": function.get("name", ""), "args": args}
+                entry["tools"].append(tool)
+                pending[call.get("id") or function.get("name", "")] = tool
+        elif role == "tool":
+            text = message.get("content") or ""
+            tool = pending.get(message.get("tool_call_id") or "")
+            if tool is not None:
+                tool["result"] = text
+                tool["ok"] = not text.startswith("ОШИБКА")
+
+    # ход без текста и без инструментов показывать нечего
+    return [entry for entry in entries if entry["text"] or entry["tools"]]
 
 
 def render_plan_for_prompt(plan: Plan) -> str:
@@ -77,14 +106,14 @@ def render_plan_for_prompt(plan: Plan) -> str:
         f"Старт проекта: {schedule.project_start.isoformat()}, "
         f"окончание: {schedule.project_end.isoformat() if schedule.project_end else '—'}, "
         f"задач: {len(schedule.tasks)}",
-        "Текущий план (id | задача | исполнитель | дни | старт..финиш | предшественники):",
+        "Текущий план (#номер | id | задача | исполнитель | дни | старт..финиш | предшественники):",
     ]
-    for t in schedule.tasks:
+    for index, t in enumerate(schedule.tasks, start=1):
         preds = ", ".join(names.get(p, p) for p in t.predecessors) or "—"
         marks = " [крит.путь]" if t.is_critical else ""
         marks += " [дата закреплена]" if t.is_pinned else ""
         lines.append(
-            f"{t.id} | {t.name} | {t.assignee or '—'} | {t.duration_days} | "
+            f"#{index} | {t.id} | {t.name} | {t.assignee or '—'} | {t.duration_days} | "
             f"{t.start.isoformat()}..{t.end.isoformat()} | {preds}{marks}"
         )
     return "\n".join(lines)
@@ -126,7 +155,7 @@ async def run_turn(
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{render_plan_for_prompt(plan_before)}"},
-        *memory.get(session_id),
+        *load_history(store, session_id),
         {"role": "user", "content": user_message},
     ]
     history: list[dict[str, Any]] = [{"role": "user", "content": user_message}]
@@ -197,7 +226,7 @@ async def run_turn(
         else:
             yield {"type": "error", "text": f"Сбой агента: {_describe(exc)}"}
 
-    memory.set(session_id, memory.get(session_id) + history)
+    store.append_chat(session_id, history)
 
     plan_after = store.get_plan(session_id) or plan_before
     if tool_calls_made:

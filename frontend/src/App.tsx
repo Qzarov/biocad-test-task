@@ -13,6 +13,7 @@ import type {
   ChatEntry,
   ColumnKey,
   Health,
+  Mention,
   ModelInfo,
   PlanPayload,
   TaskFilters,
@@ -57,6 +58,7 @@ export default function App() {
   const [prefs, setPrefs] = useState(loadPrefs);
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -111,6 +113,23 @@ export default function App() {
       })
       .catch(() => setModels([]));
     run(() => api.plan(), { highlight: false });
+
+    // переписка живёт на сервере, поэтому после перезагрузки страницы её нужно
+    // просто забрать: id ходов генерируем локально, они нужны только React
+    api
+      .chatHistory()
+      .then((history) =>
+        setEntries(
+          history.entries.map((entry, index) => ({
+            id: `history-${index}`,
+            role: entry.role,
+            text: entry.text,
+            tools: entry.tools,
+          })),
+        ),
+      )
+      .catch(() => undefined)
+      .finally(() => setLoadingHistory(false));
   }, [run]);
 
   useEffect(() => {
@@ -149,6 +168,35 @@ export default function App() {
     [plan],
   );
   const columnWidth = columnWidthFor(viewMode, prefs.zoom);
+
+  // Номер задачи — её позиция в плане (не в отфильтрованном списке): именно этот
+  // номер видит пользователь и понимает бэкенд.
+  const taskNumbers = useMemo(() => {
+    const map: Record<string, number> = {};
+    (plan?.tasks ?? []).forEach((task, index) => {
+      map[task.id] = index + 1;
+    });
+    return map;
+  }, [plan]);
+
+  const mentions = useMemo<Mention[]>(
+    () => [
+      ...(plan?.tasks ?? []).map((task, index) => ({
+        kind: "task" as const,
+        label: task.name,
+        hint: task.assignee ? `задача · ${task.assignee}` : "задача",
+        insert: `#${index + 1} «${task.name}»`,
+        number: index + 1,
+      })),
+      ...assigneeOptions.map((assignee) => ({
+        kind: "person" as const,
+        label: assignee,
+        hint: "исполнитель",
+        insert: `@${assignee}`,
+      })),
+    ],
+    [plan, assigneeOptions],
+  );
 
   const criticalCount = schedule?.tasks.filter((task) => task.is_critical).length ?? 0;
   const assignees = new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean));
@@ -302,7 +350,10 @@ export default function App() {
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
-              if (file) run(() => api.importXlsx(file), { highlight: false });
+              if (file) {
+                setEntries([]);
+                run(() => api.importXlsx(file), { highlight: false });
+              }
             }}
           />
           <button
@@ -422,6 +473,7 @@ export default function App() {
               columnWidth={columnWidth}
               columns={prefs.columns}
               columnWidths={prefs.columnWidths}
+              numbers={taskNumbers}
               onColumnWidth={(key, width) =>
                 setPrefs((current) => {
                   const columnWidths = { ...current.columnWidths };
@@ -469,12 +521,16 @@ export default function App() {
           health={health}
           models={models}
           model={prefs.model}
+          mentions={mentions}
+          loadingHistory={loadingHistory}
           onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
           onSend={sendMessage}
           onStop={() => abort.current?.abort()}
           onClear={() => {
-            setEntries([]);
-            api.clearChat().catch(() => undefined);
+            api
+              .clearChat()
+              .then(() => setEntries([]))
+              .catch(fail);
           }}
         />
       </div>
