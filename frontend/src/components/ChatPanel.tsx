@@ -135,10 +135,17 @@ export function ChatPanel({
           <div className="chat__title">Агент плана</div>
           <button
             className="frox-btn frox-btn-outline frox-btn-sm"
-            onClick={onClear}
+            onClick={() => {
+              // Переписка удаляется на сервере безвозвратно, вместе с контекстом
+              // разговора, — поэтому спрашиваем.
+              if (window.confirm("Удалить переписку? Она стирается на сервере, вернуть её нельзя.")) {
+                onClear();
+              }
+            }}
             disabled={streaming || entries.length === 0}
+            title="Удаляет переписку на сервере вместе с контекстом разговора — вернуть нельзя"
           >
-            Очистить
+            Удалить переписку
           </button>
         </div>
 
@@ -181,7 +188,7 @@ export function ChatPanel({
             <p>
               Опишите правки словами — агент вызовет инструменты плана через MCP и диаграмма
               перестроится. Можно менять сразу много задач. Через <code>@</code> вставляется ссылка
-              на задачу или человека.
+              на задачу или человека, номером из списка тоже можно сослаться: <code>#5</code>.
             </p>
             <div className="suggestions">
               {SUGGESTIONS.map((text) => (

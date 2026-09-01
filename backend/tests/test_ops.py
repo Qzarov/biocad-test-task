@@ -199,3 +199,14 @@ def test_task_id_wins_over_number_lookalike():
     plan = base_plan()
     plan.tasks.append(Task(id="2026", name="Бюджет 2026", duration_days=1))
     assert ops.resolve_task(plan, "2026").id == "2026"
+
+
+def test_resolve_task_ignores_surrounding_quotes():
+    assert ops.resolve_task(base_plan(), "«Анализ»").id == "analiz"
+    assert ops.resolve_task(base_plan(), '"Дизайн"').id == "dizayn"
+
+
+def test_stale_number_loses_to_the_name_in_one_reference():
+    """Ссылка «#1 «Вёрстка»» противоречива: номер устарел после переупорядочивания."""
+    assert ops.resolve_task(base_plan(), "#1 «Вёрстка»").id == "verstka"
+    assert ops.resolve_task(base_plan(), "3 «Анализ»").id == "analiz"

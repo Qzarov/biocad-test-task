@@ -185,7 +185,11 @@ export default function App() {
         kind: "task" as const,
         label: task.name,
         hint: task.assignee ? `задача · ${task.assignee}` : "задача",
-        insert: `#${index + 1} «${task.name}»`,
+        // В текст вставляется название, а не номер: номер — это позиция, и после
+        // перетаскивания задач он в уже набранном сообщении указывал бы на другую
+        // задачу. Номер остаётся в меню (по нему удобно искать) и в ручном вводе
+        // «#5», который разбирается в момент отправки.
+        insert: `«${task.name}»`,
         number: index + 1,
       })),
       ...assigneeOptions.map((assignee) => ({
