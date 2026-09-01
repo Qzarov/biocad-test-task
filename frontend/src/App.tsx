@@ -76,6 +76,7 @@ export default function App() {
   const [view, setView] = useState<ViewWindow>(() => ({ from: 0, days: loadPrefs().windowDays }));
   const [viewport, setViewport] = useState(900);
   const [geometry, setGeometry] = useState({ originPx: 0, pxPerDay: 0 });
+  const [scroll, setScroll] = useState({ left: 0, viewport: 0 });
   // На узком экране список в полную ширину выдавливает таймлайн за край: двигать
   // диаграмму становится нечем. Поэтому там остаётся только колонка с названием,
   // и та ограничена по ширине; настройки колонок при этом не теряются.
@@ -276,6 +277,16 @@ export default function App() {
     : 0;
   const viewDate = useMemo(() => new Date(viewDateTime), [viewDateTime]);
   const pxPerDay = geometry.pxPerDay > 0 ? geometry.pxPerDay : columnWidth / daysPerColumn;
+
+  // Видимая часть плана для бегунка на спайне: считаем из фактической прокрутки
+  // таймлайна, а не из окна шкалы — на телефоне жест двигает диаграмму напрямую.
+  const visibleWindow =
+    geometry.pxPerDay > 0 && scroll.viewport > 0
+      ? {
+          from: (scroll.left - geometry.originPx) / geometry.pxPerDay,
+          days: scroll.viewport / geometry.pxPerDay,
+        }
+      : null;
 
   // Колесо двигает окно просмотра: при «всём проекте» двигать некуда, и вид
   // просто стоит на месте — раньше диаграмма уезжала в пустой хвост таймлайна.
@@ -696,6 +707,7 @@ export default function App() {
               viewDate={viewDate}
               onViewport={setViewport}
               onGeometry={setGeometry}
+              onScroll={setScroll}
               pxPerDay={pxPerDay}
               onPan={panDays}
               onColumnWidth={(key, width) =>
@@ -738,7 +750,13 @@ export default function App() {
             </div>
           )}
 
-          {schedule && <ProjectSpine schedule={schedule} />}
+          {schedule && (
+            <ProjectSpine
+              schedule={schedule}
+              // В режиме списка бегунку нечего показывать: диаграммы на экране нет.
+              window={narrow && prefs.mobileView === "list" ? null : visibleWindow}
+            />
+          )}
         </section>
 
         {(!narrow || chatExpanded) && (

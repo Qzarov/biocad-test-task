@@ -6,7 +6,13 @@ import type { Schedule } from "../types";
  * that the chart above needs scrolling for — how long the project runs, where the work piles up, and how much of it
  * sits on the critical path. Lanes are filled round-robin, so density is real
  * information: a crowded stretch is a crowded month. */
-export function ProjectSpine({ schedule }: { schedule: Schedule }) {
+interface Props {
+  schedule: Schedule;
+  /** Видимая часть плана в днях от старта проекта — бегунок на спайне. */
+  window?: { from: number; days: number } | null;
+}
+
+export function ProjectSpine({ schedule, window: visible }: Props) {
   const start = new Date(schedule.project_start).getTime();
   const end = schedule.project_end ? new Date(schedule.project_end).getTime() : start;
   const span = Math.max(end - start, 86400000);
@@ -32,9 +38,32 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
+  // Бегунок показывает, какой кусок проекта сейчас на диаграмме. Позиция берётся
+  // из фактической прокрутки таймлайна, поэтому едет и от жеста, и от шкалы.
+  const totalDays = span / 86400000;
+  const marker =
+    visible && visible.days > 0
+      ? (() => {
+          const from = Math.max(0, Math.min(visible.from, totalDays));
+          const to = Math.max(from, Math.min(visible.from + visible.days, totalDays));
+          const left = (from / totalDays) * 100;
+          const width = ((to - from) / totalDays) * 100;
+          // Когда видно практически весь проект, бегунок совпал бы со шкалой и
+          // только обвёл бы её рамкой — не показываем.
+          return width >= 98 ? null : { left, width: Math.max(width, 1.5) };
+        })()
+      : null;
+
   return (
     <div className="spine">
       <div className="spine__scale">
+        {marker && (
+          <span
+            className="spine__window"
+            style={{ left: `${marker.left}%`, width: `${marker.width}%` }}
+            title="Видимая часть плана — двигается вместе с прокруткой диаграммы"
+          />
+        )}
         <svg
           className="spine__svg"
           viewBox={`0 0 ${width} ${height + 10}`}

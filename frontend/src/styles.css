@@ -270,6 +270,17 @@ a.frox-btn {
   height: 26px;
 }
 
+/* Бегунок — видимая часть плана. Только рамка и лёгкая подложка: плотность
+   работ под ним должна оставаться читаемой. */
+.spine__window {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  border: 1px solid var(--accent-text);
+  border-radius: 5px;
+  background: rgba(60, 176, 67, 0.12);
+}
+
 .spine__svg {
   display: block;
   width: 100%;

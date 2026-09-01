@@ -55,6 +55,10 @@ interface Props {
    *  сколько пикселей приходится на день. Считать это из правил библиотеки
    *  нельзя: она по-разному расширяет диапазон для дня, недели и месяца. */
   onGeometry: (geometry: { originPx: number; pxPerDay: number }) => void;
+  /** Фактическая позиция прокрутки таймлайна. Читаем её у самой библиотеки, а не
+   *  из окна шкалы: на телефоне жест двигает диаграмму напрямую, и окно шкалы о
+   *  этом не знает. */
+  onScroll?: (position: { left: number; viewport: number }) => void;
   /** Пиксели на день — из замеренной геометрии; нужны, чтобы перевести
    *  прокрутку колесом в дни. */
   pxPerDay: number;
@@ -85,6 +89,7 @@ export function GanttBoard({
   onColumnWidth,
   onViewport,
   onGeometry,
+  onScroll,
   pxPerDay,
   onPan,
   changed,
@@ -187,25 +192,49 @@ export function GanttBoard({
   const pxPerDayRef = useRef(pxPerDay);
   const beginReorderRef = useRef(beginReorder);
   const pixelScrollRef = useRef(pixelScroll);
+  const originRef = useRef<number | null>(null);
+  const projectDaysRef = useRef(0);
 
   useEffect(() => {
     panRef.current = onPan;
     pxPerDayRef.current = pxPerDay;
     beginReorderRef.current = beginReorder;
     pixelScrollRef.current = pixelScroll;
-  }, [onPan, pxPerDay, beginReorder, pixelScroll]);
+    projectDaysRef.current = schedule.project_end
+      ? Math.round(
+          (new Date(`${schedule.project_end}T00:00:00`).getTime() -
+            new Date(`${schedule.project_start}T00:00:00`).getTime()) /
+            86400000,
+        ) + 1
+      : 0;
+  }, [onPan, pxPerDay, beginReorder, pixelScroll, schedule]);
 
   useEffect(() => {
     const element = frame.current;
     if (!element) return;
 
+    // Одно событие scroll ловит все источники прокрутки: шкалу (проп viewDate),
+    // колесо, наши жесты — библиотека всё сводит к этому элементу.
+    const report = () => {
+      const node = scroller.current;
+      if (node) onScroll?.({ left: node.scrollLeft, viewport: node.clientWidth });
+    };
+
+    // Слушатель навешивается заново при каждом прогоне эффекта: раньше выход по
+    // «элемент тот же» случался до подписки, и после первой же перерисовки
+    // прокрутка перестала докладывать о себе — бегунок на спайне стоял на месте.
     const attach = () => {
       const found = Array.from(element.querySelectorAll("div")).find(
         (candidate) => getComputedStyle(candidate).overflowX === "auto",
       );
-      if (!found || found === scroller.current) return;
-      scroller.current = found as HTMLElement;
-      onViewport(found.clientWidth);
+      if (!found) return;
+      if (found !== scroller.current) {
+        scroller.current = found as HTMLElement;
+        onViewport(found.clientWidth);
+      }
+      found.removeEventListener("scroll", report);
+      found.addEventListener("scroll", report, { passive: true });
+      report();
     };
 
     attach();
@@ -214,14 +243,16 @@ export function GanttBoard({
 
     const sizes = new ResizeObserver(() => {
       if (scroller.current) onViewport(scroller.current.clientWidth);
+      report();
     });
     if (scroller.current) sizes.observe(scroller.current);
 
     return () => {
+      scroller.current?.removeEventListener("scroll", report);
       observer.disconnect();
       sizes.disconnect();
     };
-  }, [onViewport]);
+  }, [onViewport, onScroll]);
 
   useEffect(() => {
     const element = frame.current;
@@ -323,7 +354,19 @@ export function GanttBoard({
       if (axis === "y") {
         nudge(event.target, 0, -(event.clientY - lastY));
       } else if (pixelScrollRef.current) {
-        nudge(event.target, -(event.clientX - lastX), 0);
+        // Таймлайн библиотеки продолжается на год после финиша проекта, и без
+        // ограничения жест уезжал в пустоту. Дальше последней задачи не пускаем.
+        const node = scroller.current;
+        let delta = -(event.clientX - lastX);
+        const perDay = pxPerDayRef.current;
+        if (node && originRef.current !== null && perDay > 0 && projectDaysRef.current > 0) {
+          const limit = Math.max(
+            0,
+            originRef.current + projectDaysRef.current * perDay - node.clientWidth,
+          );
+          delta = Math.min(limit, Math.max(0, node.scrollLeft + delta)) - node.scrollLeft;
+        }
+        if (delta) nudge(event.target, delta, 0);
       } else {
         const perDay = pxPerDayRef.current > 0 ? pxPerDayRef.current : 6;
         panRef.current(-(event.clientX - lastX) / perDay);
@@ -382,7 +425,8 @@ export function GanttBoard({
       if (!other) return;
       const pxPerDay = (other.px - first.px) / (other.day - first.day);
       if (!Number.isFinite(pxPerDay) || pxPerDay <= 0) return;
-      onGeometry({ originPx: first.px - first.day * pxPerDay, pxPerDay });
+      originRef.current = first.px - first.day * pxPerDay;
+      onGeometry({ originPx: originRef.current, pxPerDay });
     };
 
     const timer = window.setTimeout(measure, 60);
