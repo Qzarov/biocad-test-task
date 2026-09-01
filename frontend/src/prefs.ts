@@ -8,14 +8,16 @@ const KEY = "gantt-agent-prefs";
 export interface Prefs {
   columns: ColumnKey[];
   columnWidths: ColumnWidths; // только изменённые вручную; остальное — по умолчанию
-  zoom: number; // 0..100, положение ползунка масштаба
+  // Длина окна просмотра в днях; null — «весь проект». Позиция окна не
+  // сохраняется: возвращаться хочется к масштабу, а не к месту прокрутки.
+  windowDays: number | null;
   model: string | null;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   columns: ["assignee", "duration"],
   columnWidths: {},
-  zoom: 45,
+  windowDays: null,
   model: null,
 };
 
@@ -30,7 +32,10 @@ export function loadPrefs(): Prefs {
         parsed.columnWidths && typeof parsed.columnWidths === "object"
           ? (parsed.columnWidths as ColumnWidths)
           : {},
-      zoom: typeof parsed.zoom === "number" ? Math.min(100, Math.max(0, parsed.zoom)) : DEFAULT_PREFS.zoom,
+      windowDays:
+        typeof parsed.windowDays === "number" && parsed.windowDays > 0
+          ? Math.round(parsed.windowDays)
+          : null,
       model: typeof parsed.model === "string" ? parsed.model : null,
     };
   } catch {

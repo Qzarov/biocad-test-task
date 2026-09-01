@@ -37,7 +37,6 @@ interface Props {
   onModelChange: (model: string) => void;
   onSend: (message: string) => void;
   onStop: () => void;
-  onClear: () => void;
 }
 
 export function ChatPanel({
@@ -51,7 +50,6 @@ export function ChatPanel({
   onModelChange,
   onSend,
   onStop,
-  onClear,
 }: Props) {
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -133,20 +131,6 @@ export function ChatPanel({
       <header className="chat__head">
         <div className="chat__head-row">
           <div className="chat__title">Агент плана</div>
-          <button
-            className="frox-btn frox-btn-outline frox-btn-sm"
-            onClick={() => {
-              // Переписка удаляется на сервере безвозвратно, вместе с контекстом
-              // разговора, — поэтому спрашиваем.
-              if (window.confirm("Удалить переписку? Она стирается на сервере, вернуть её нельзя.")) {
-                onClear();
-              }
-            }}
-            disabled={streaming || entries.length === 0}
-            title="Удаляет переписку на сервере вместе с контекстом разговора — вернуть нельзя"
-          >
-            Удалить переписку
-          </button>
         </div>
 
         {models.length > 0 ? (

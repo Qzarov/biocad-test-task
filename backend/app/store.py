@@ -148,6 +148,29 @@ class PlanStore:
             conn.execute("UPDATE sessions SET head_seq = ? WHERE id = ?", (target, session_id))
         return Plan.model_validate_json(snap["plan_json"]), f"Откат к состоянию «{snap['label']}»"
 
+    def redo(self, session_id: str) -> tuple[Optional[Plan], str]:
+        """Шаг вперёд по истории — обратная сторона undo.
+
+        Будущее существует только сразу после отката: любая новая правка
+        обрезает снимки после текущего (см. save_plan), и «вернуть» становится
+        нечего. Так ведут себя все привычные редакторы.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT head_seq FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if not row:
+                return None, "Возвращать нечего"
+            target = row["head_seq"] + 1
+            snap = conn.execute(
+                "SELECT plan_json, label FROM snapshots WHERE session_id = ? AND seq = ?",
+                (session_id, target),
+            ).fetchone()
+            if not snap:
+                return None, "Возвращать нечего — это последнее состояние плана"
+            conn.execute("UPDATE sessions SET head_seq = ? WHERE id = ?", (target, session_id))
+        return Plan.model_validate_json(snap["plan_json"]), f"Возврат к состоянию «{snap['label']}»"
+
     def history(self, session_id: str) -> list[dict]:
         with self._conn() as conn:
             head_row = conn.execute(

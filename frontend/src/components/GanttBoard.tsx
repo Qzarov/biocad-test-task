@@ -37,7 +37,12 @@ interface Props {
   columns: ColumnKey[];
   columnWidths: ColumnWidths;
   numbers: Record<string, number>;
+  /** Позиция прокрутки таймлайна в пикселях — ею управляет шкала над диаграммой. */
+  scrollLeft: number;
   onColumnWidth: (key: ColumnKey | "name", width: number | null) => void;
+  /** Ширина видимой части таймлайна: из неё считается масштаб под окно просмотра. */
+  onViewport: (width: number) => void;
+  onScrollLeft: (px: number) => void;
   changed: string[];
   selectedId: string | null;
   filtered: boolean;
@@ -55,7 +60,10 @@ export function GanttBoard({
   columns,
   columnWidths,
   numbers,
+  scrollLeft,
   onColumnWidth,
+  onViewport,
+  onScrollLeft,
   changed,
   selectedId,
   filtered,
@@ -77,6 +85,62 @@ export function GanttBoard({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // Горизонтальную прокрутку библиотека держит в своём контейнере; шкала над
+  // диаграммой управляет им напрямую, а обратно мы слушаем скролл, чтобы шкала
+  // не отставала, если человек прокрутил колесом или ползунком.
+  const scroller = useRef<HTMLElement | null>(null);
+  const programmatic = useRef(false);
+
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+
+    const attach = () => {
+      const found = Array.from(element.querySelectorAll("div")).find(
+        (candidate) => getComputedStyle(candidate).overflowX === "auto",
+      );
+      if (!found || found === scroller.current) return;
+      scroller.current = found as HTMLElement;
+      onViewport(found.clientWidth);
+    };
+
+    attach();
+    const observer = new MutationObserver(attach);
+    observer.observe(element, { childList: true, subtree: true });
+
+    const onScroll = () => {
+      const node = scroller.current;
+      if (!node || programmatic.current) return;
+      onScrollLeft(node.scrollLeft);
+    };
+    element.addEventListener("scroll", onScroll, true);
+
+    const sizes = new ResizeObserver(() => {
+      if (scroller.current) onViewport(scroller.current.clientWidth);
+    });
+    if (scroller.current) sizes.observe(scroller.current);
+
+    return () => {
+      observer.disconnect();
+      sizes.disconnect();
+      element.removeEventListener("scroll", onScroll, true);
+    };
+  }, [onViewport, onScrollLeft]);
+
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const room = node.scrollWidth - node.clientWidth;
+    const target = Math.round(Math.min(room, Math.max(0, scrollLeft)));
+    if (Math.abs(node.scrollLeft - target) < 2) return;
+    programmatic.current = true;
+    node.scrollLeft = target;
+    // снимаем флаг после того, как браузер разошлёт события скролла
+    window.setTimeout(() => {
+      programmatic.current = false;
+    }, 120);
+  }, [scrollLeft, columnWidth, schedule]);
 
   const byId = useMemo(() => {
     const map = new Map<string, ScheduledTask>();

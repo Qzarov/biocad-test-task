@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ViewMode } from "gantt-task-react";
+import { Redo2, Undo2 } from "lucide-react";
 import { ApiError, api, sessionId, streamChat } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
-import { ColumnPicker } from "./components/ColumnPicker";
+import { ColumnPicker, columnsWidth } from "./components/ColumnPicker";
 import { GanttBoard } from "./components/GanttBoard";
 import { ProjectSpine } from "./components/ProjectSpine";
 import { EMPTY_FILTERS, TableFilter, applyFilters, isFilterActive } from "./components/TableFilter";
 import { TaskModal } from "./components/TaskModal";
-import { daysBetween, formatDate, plural } from "./format";
+import { MIN_WINDOW_DAYS, TimeBrush } from "./components/TimeBrush";
+import { Toasts, type Toast } from "./components/Toasts";
+import { daysBetween, formatDateNumeric } from "./format";
 import { loadPrefs, savePrefs } from "./prefs";
 import type {
   ChatEntry,
@@ -19,37 +22,57 @@ import type {
   TaskFilters,
 } from "./types";
 
-const VIEW_MODES: { mode: ViewMode; label: string }[] = [
-  { mode: ViewMode.Day, label: "День" },
-  { mode: ViewMode.Week, label: "Неделя" },
-  { mode: ViewMode.Month, label: "Месяц" },
-];
-
-/** Ползунок масштаба меняет ширину колонки таймлайна внутри выбранного режима:
- *  в днях разумный диапазон один, в месяцах — другой. Само положение ползунка
- *  общее, поэтому при переключении режима «плотность» сохраняется. */
-const ZOOM_RANGES: Partial<Record<ViewMode, [number, number]>> = {
-  [ViewMode.Day]: [22, 84],
-  [ViewMode.Week]: [44, 156],
-  [ViewMode.Month]: [72, 288],
-};
-
-function columnWidthFor(mode: ViewMode, zoom: number): number {
-  const [min, max] = ZOOM_RANGES[mode] ?? [40, 140];
-  return Math.round(min + ((max - min) * Math.min(100, Math.max(0, zoom))) / 100);
+/** Шаг таймлайна выводится из ширины окна просмотра: зазумившись на неделю,
+ *  бессмысленно видеть в шапке месяцы, а на годовом проекте — дни. */
+function stepFor(windowDays: number): ViewMode {
+  if (windowDays <= 45) return ViewMode.Day;
+  if (windowDays <= 240) return ViewMode.Week;
+  return ViewMode.Month;
 }
 
-interface Notice {
-  kind: "info" | "error";
-  message: string;
-  details?: string[];
+const DAYS_PER_COLUMN: Partial<Record<ViewMode, number>> = {
+  [ViewMode.Day]: 1,
+  [ViewMode.Week]: 7,
+  [ViewMode.Month]: 30.44,
+};
+
+/** Сколько дней таймлайн рисует ДО старта проекта.
+ *
+ * Замерено на самой библиотеке (`preStepsCount={1}`): она начинает диаграмму с
+ * начала дня/недели/месяца, содержащего старт, и отступает назад ещё на один
+ * шаг. Без этой поправки позиция окна и позиция диаграммы расходятся — особенно
+ * заметно на месячном шаге, где библиотека вдобавок дорисовывает целый год
+ * после конца проекта, так что «доля прокрутки» здесь считаться не может.
+ */
+function leadDays(mode: ViewMode, projectStart: string): number {
+  const start = new Date(`${projectStart}T00:00:00`);
+  if (mode === ViewMode.Day) return 1;
+  if (mode === ViewMode.Week) {
+    const sinceMonday = (start.getDay() + 6) % 7;
+    return sinceMonday + 7;
+  }
+  const previousMonthDays = new Date(start.getFullYear(), start.getMonth(), 0).getDate();
+  return start.getDate() - 1 + previousMonthDays;
+}
+
+const STEP_LABELS: Partial<Record<ViewMode, string>> = {
+  [ViewMode.Day]: "дни",
+  [ViewMode.Week]: "недели",
+  [ViewMode.Month]: "месяцы",
+};
+
+/** Окно просмотра: смещение в днях от старта проекта и его длина.
+ *  `days: null` — «весь проект», чтобы окно не ломалось при замене плана. */
+interface ViewWindow {
+  from: number;
+  days: number | null;
 }
 
 export default function App() {
   const [payload, setPayload] = useState<PlanPayload | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
-  const [viewModeTouched, setViewModeTouched] = useState(false);
+  const [view, setView] = useState<ViewWindow>(() => ({ from: 0, days: loadPrefs().windowDays }));
+  const [viewport, setViewport] = useState(900);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [changed, setChanged] = useState<string[]>([]);
@@ -60,19 +83,30 @@ export default function App() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const highlightTimer = useRef<number | null>(null);
 
-  const fail = useCallback((error: unknown) => {
-    if (error instanceof ApiError) {
-      setNotice({ kind: "error", message: error.message, details: error.details });
-    } else {
-      setNotice({ kind: "error", message: String(error) });
-    }
+  const pushToast = useCallback((toast: Omit<Toast, "id">) => {
+    setToasts((current) => [...current.slice(-3), { ...toast, id: Date.now() + Math.random() }]);
   }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
+  const fail = useCallback(
+    (error: unknown) => {
+      if (error instanceof ApiError) {
+        pushToast({ kind: "error", message: error.message, details: error.details });
+      } else {
+        pushToast({ kind: "error", message: String(error) });
+      }
+    },
+    [pushToast],
+  );
 
   const highlight = useCallback((ids: string[]) => {
     setChanged(ids);
@@ -87,7 +121,7 @@ export default function App() {
         const next = await action();
         setPayload(next);
         if (options.highlight !== false) highlight(next.changed ?? []);
-        if (next.message) setNotice({ kind: "info", message: next.message });
+        if (next.message) pushToast({ kind: "info", message: next.message });
         return next;
       } catch (error) {
         fail(error);
@@ -96,7 +130,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [fail, highlight],
+    [fail, highlight, pushToast],
   );
 
   useEffect(() => {
@@ -136,6 +170,8 @@ export default function App() {
     savePrefs(prefs);
   }, [prefs]);
 
+
+
   const plan = payload?.plan;
   const schedule = payload?.schedule;
 
@@ -167,7 +203,72 @@ export default function App() {
       ),
     [plan],
   );
-  const columnWidth = columnWidthFor(viewMode, prefs.zoom);
+  const criticalCount = schedule?.tasks.filter((task) => task.is_critical).length ?? 0;
+  const assignees = new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean));
+  const totalDays =
+    schedule?.project_end ? daysBetween(schedule.project_start, schedule.project_end) : 0;
+
+  // Из окна просмотра выводится всё: шаг таймлайна, ширина колонки и позиция
+  // прокрутки. Одна величина вместо трёх независимых контролов.
+  const windowDays = Math.min(
+    Math.max(MIN_WINDOW_DAYS, view.days ?? (totalDays || MIN_WINDOW_DAYS)),
+    Math.max(MIN_WINDOW_DAYS, totalDays || MIN_WINDOW_DAYS),
+  );
+  const windowFrom = Math.min(Math.max(0, view.from), Math.max(0, totalDays - windowDays));
+  const windowTo = windowFrom + windowDays;
+  const viewMode = stepFor(windowDays);
+  const columnWidth = Math.round(
+    Math.min(
+      420,
+      Math.max(
+        16,
+        // +1 колонка — библиотека рисует одну до старта проекта (preStepsCount)
+        viewport / Math.max(1, windowDays / (DAYS_PER_COLUMN[viewMode] ?? 7) + 1),
+      ),
+    ),
+  );
+  const daysPerColumn = DAYS_PER_COLUMN[viewMode] ?? 7;
+  const scrollLeft = schedule
+    ? ((leadDays(viewMode, schedule.project_start) + windowFrom) / daysPerColumn) * columnWidth
+    : 0;
+  const listWidth = columnsWidth(prefs.columns, prefs.columnWidths);
+
+  // Кнопки отмены и возврата ходят по той же истории снимков, что и агент:
+  // текущее состояние помечено is_current, всё до него — отмена, после — возврат.
+  const historyIndex = payload?.history?.findIndex((item) => item.is_current) ?? -1;
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex >= 0 && historyIndex < (payload?.history?.length ?? 0) - 1;
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      // в полях ввода Ctrl+Z должен отменять текст, а не правку плана
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      event.preventDefault();
+      if (event.shiftKey) {
+        if (canRedo) run(() => api.redo(), { highlight: false });
+      } else if (canUndo) {
+        run(() => api.undo(), { highlight: false });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canUndo, canRedo, run]);
+
+  const setWindow = useCallback(
+    (from: number, to: number) => {
+      setView({
+        from: Math.max(0, Math.round(from)),
+        days: to - from >= totalDays ? null : Math.round(to - from),
+      });
+      setPrefs((current) => ({
+        ...current,
+        windowDays: to - from >= totalDays ? null : Math.round(to - from),
+      }));
+    },
+    [totalDays],
+  );
 
   // Номер задачи — её позиция в плане (не в отфильтрованном списке): именно этот
   // номер видит пользователь и понимает бэкенд.
@@ -202,17 +303,6 @@ export default function App() {
     [plan, assigneeOptions],
   );
 
-  const criticalCount = schedule?.tasks.filter((task) => task.is_critical).length ?? 0;
-  const assignees = new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean));
-  const totalDays =
-    schedule?.project_end ? daysBetween(schedule.project_start, schedule.project_end) : 0;
-
-  // A year-long plan is unreadable week by week; a two-week plan looks empty by
-  // month. So the initial zoom follows the plan, until the user picks one.
-  useEffect(() => {
-    if (viewModeTouched || !totalDays) return;
-    setViewMode(totalDays > 120 ? ViewMode.Month : ViewMode.Week);
-  }, [totalDays, viewModeTouched]);
 
   const sendMessage = useCallback(
     async (message: string) => {
@@ -223,7 +313,6 @@ export default function App() {
         { id: turnId, role: "agent", text: "", tools: [], pending: true },
       ]);
       setStreaming(true);
-      setNotice(null);
       abort.current = new AbortController();
 
       const patch = (update: (entry: ChatEntry) => ChatEntry) =>
@@ -307,11 +396,11 @@ export default function App() {
             <span className="num">сессия {sessionId()}</span>
           </div>
           <h1>{plan?.title ?? "План проекта"}</h1>
-          <div className="masthead__meta">
-            <span className="metric">
-              <span className="metric__label">Старт</span>
+          <div className="stats">
+            <label className="stats__item">
+              <span className="stats__label">старт</span>
               <input
-                className="metric__date"
+                className="stats__date"
                 type="date"
                 value={schedule?.project_start ?? ""}
                 onChange={(event) =>
@@ -319,28 +408,26 @@ export default function App() {
                 }
                 disabled={busy || streaming}
               />
+            </label>
+            <span className="stats__item">
+              <span className="stats__label">финиш</span>
+              <b className="num">{formatDateNumeric(schedule?.project_end)}</b>
             </span>
-            <span className="metric">
-              <span className="metric__label">Финиш</span>
-              <span className="metric__value">{formatDate(schedule?.project_end)}</span>
+            <span className="stats__item">
+              <b className="num">{totalDays || "—"}</b>
+              <span className="stats__label">дн.</span>
             </span>
-            <span className="metric">
-              <span className="metric__label">Длительность</span>
-              <span className="metric__value">{totalDays ? plural(totalDays, "день", "дня", "дней") : "—"}</span>
+            <span className="stats__item">
+              <b className="num">{plan?.tasks.length ?? 0}</b>
+              <span className="stats__label">задач</span>
             </span>
-            <span className="metric">
-              <span className="metric__label">Задач</span>
-              <span className="metric__value">{plan?.tasks.length ?? 0}</span>
+            <span className="stats__item" title="Задачи без запаса: сдвинь любую — уедет весь проект">
+              <b className="num stats__critical">{criticalCount}</b>
+              <span className="stats__label">крит.</span>
             </span>
-            <span className="metric">
-              <span className="metric__label">Критический путь</span>
-              <span className="metric__value metric__value--critical">
-                {criticalCount ? plural(criticalCount, "задача", "задачи", "задач") : "—"}
-              </span>
-            </span>
-            <span className="metric">
-              <span className="metric__label">Исполнителей</span>
-              <span className="metric__value">{assignees.size}</span>
+            <span className="stats__item">
+              <b className="num">{assignees.size}</b>
+              <span className="stats__label">исп.</span>
             </span>
           </div>
         </div>
@@ -370,14 +457,26 @@ export default function App() {
           <a className="frox-btn frox-btn-brand" href={api.exportUrl()}>
             Скачать Excel
           </a>
-          <button
-            className="frox-btn frox-btn-outline"
-            onClick={() => run(() => api.undo(), { highlight: false })}
-            disabled={busy || streaming || (payload?.history?.length ?? 0) < 2}
-            title="Откатить последнюю правку"
-          >
-            Откатить
-          </button>
+          <span className="undo-pair">
+            <button
+              className="icon-btn"
+              onClick={() => run(() => api.undo(), { highlight: false })}
+              disabled={busy || streaming || !canUndo}
+              title="Отменить последнюю правку (Ctrl+Z)"
+              aria-label="Отменить"
+            >
+              <Undo2 size={15} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => run(() => api.redo(), { highlight: false })}
+              disabled={busy || streaming || !canRedo}
+              title="Вернуть отменённую правку (Ctrl+Shift+Z)"
+              aria-label="Вернуть"
+            >
+              <Redo2 size={15} />
+            </button>
+          </span>
           <a
             className="frox-btn frox-btn-outline"
             href={api.templateUrl()}
@@ -392,49 +491,15 @@ export default function App() {
 
       <div className="workspace">
         <section className="chart">
-          <div className="chart__toolbar">
-            <TableFilter
-              filters={filters}
-              assignees={assigneeOptions}
-              shown={visibleTasks.length}
-              total={schedule?.tasks.length ?? 0}
-              onChange={setFilters}
-            />
-
-            <div className="chart__view">
-              <div className="frox-tabs" role="group" aria-label="Шаг таймлайна">
-                {VIEW_MODES.map((option) => (
-                  <button
-                    key={option.label}
-                    className={`frox-tab${viewMode === option.mode ? " frox-tab-active" : ""}`}
-                    aria-pressed={viewMode === option.mode}
-                    onClick={() => {
-                      setViewMode(option.mode);
-                      setViewModeTouched(true);
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              <label className="zoom" title="Масштаб таймлайна">
-                <span className="zoom__label">Масштаб</span>
-                <input
-                  className="zoom__slider"
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={prefs.zoom}
-                  onChange={(event) =>
-                    setPrefs((current) => ({ ...current, zoom: Number(event.target.value) }))
-                  }
-                  aria-label="Масштаб таймлайна"
-                />
-                <span className="zoom__value num">{columnWidth}px</span>
-              </label>
-
+          <div className="chart__bars">
+            <div className="chart__bar chart__bar--list" style={{ width: listWidth }}>
+              <TableFilter
+                filters={filters}
+                assignees={assigneeOptions}
+                shown={visibleTasks.length}
+                total={schedule?.tasks.length ?? 0}
+                onChange={setFilters}
+              />
               <ColumnPicker
                 columns={prefs.columns}
                 hasCustomWidths={Object.keys(prefs.columnWidths).length > 0}
@@ -444,28 +509,22 @@ export default function App() {
                 onResetWidths={() => setPrefs((current) => ({ ...current, columnWidths: {} }))}
               />
             </div>
-          </div>
 
-          {notice ? (
-            <div
-              className={`notice${notice.kind === "error" ? " notice--error" : ""}`}
-              style={{ margin: "0 0 12px" }}
-            >
-              <strong>{notice.message}</strong>
-              {notice.details && notice.details.length > 0 && (
-                <ul>
-                  {notice.details.slice(0, 6).map((detail) => (
-                    <li key={detail}>{detail}</li>
-                  ))}
-                </ul>
+            <div className="chart__bar chart__bar--time">
+              {schedule && totalDays > 0 && (
+                <TimeBrush
+                  schedule={schedule}
+                  totalDays={totalDays}
+                  from={windowFrom}
+                  to={windowTo}
+                  onChange={setWindow}
+                />
               )}
+              <span className="chart__step" title="Шаг таймлайна подбирается под масштаб">
+                {STEP_LABELS[viewMode] ?? ""}
+              </span>
             </div>
-          ) : (
-            <span className="hint chart__tip">
-              Клик по строке — выделить, двойной клик — детали. Полоску можно тянуть по таймлайну,
-              снизу диаграммы — ползунок прокрутки.
-            </span>
-          )}
+          </div>
 
           {visibleSchedule ? (
             <GanttBoard
@@ -475,6 +534,18 @@ export default function App() {
               columns={prefs.columns}
               columnWidths={prefs.columnWidths}
               numbers={taskNumbers}
+              scrollLeft={scrollLeft}
+              onViewport={setViewport}
+              onScrollLeft={(px) => {
+                if (!schedule || totalDays <= windowDays) return;
+                const day =
+                  (px / Math.max(1, columnWidth)) * daysPerColumn -
+                  leadDays(viewMode, schedule.project_start);
+                setView((current) => ({
+                  ...current,
+                  from: Math.min(Math.max(0, Math.round(day)), totalDays - windowDays),
+                }));
+              }}
               onColumnWidth={(key, width) =>
                 setPrefs((current) => {
                   const columnWidths = { ...current.columnWidths };
@@ -527,12 +598,6 @@ export default function App() {
           onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
           onSend={sendMessage}
           onStop={() => abort.current?.abort()}
-          onClear={() => {
-            api
-              .clearChat()
-              .then(() => setEntries([]))
-              .catch(fail);
-          }}
         />
       </div>
 
@@ -552,6 +617,8 @@ export default function App() {
         ) : null}
         {schedule?.warnings?.length ? <span>Предупреждений: {schedule.warnings.length}</span> : null}
       </footer>
+
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
 
       {openTask && openComputed && (
         <TaskModal

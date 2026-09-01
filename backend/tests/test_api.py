@@ -492,3 +492,33 @@ def test_committed_template_file_matches_the_seed():
         (t.id, t.name, t.duration_days, t.status) for t in seeded.tasks
     ]
     assert [t.predecessors for t in committed.tasks] == [t.predecessors for t in seeded.tasks]
+
+
+def test_undo_and_redo_walk_the_history(sid):
+    client.post("/api/plan/reset", params={"session_id": sid})
+    client.patch(
+        "/api/plan/tasks/upstream", params={"session_id": sid}, json={"duration_days": 40}
+    )
+
+    undone = client.post("/api/plan/undo", params={"session_id": sid}).json()
+    assert next(t for t in undone["plan"]["tasks"] if t["id"] == "upstream")["duration_days"] == 25
+
+    redone = client.post("/api/plan/redo", params={"session_id": sid})
+    assert redone.status_code == 200
+    assert (
+        next(t for t in redone.json()["plan"]["tasks"] if t["id"] == "upstream")["duration_days"]
+        == 40
+    )
+
+    # дальше возвращать нечего
+    assert client.post("/api/plan/redo", params={"session_id": sid}).status_code == 409
+
+
+def test_a_new_edit_drops_the_redo_future(sid):
+    client.post("/api/plan/reset", params={"session_id": sid})
+    client.patch("/api/plan/tasks/upstream", params={"session_id": sid}, json={"duration_days": 40})
+    client.post("/api/plan/undo", params={"session_id": sid})
+
+    # правка после отката обрезает будущее — как в любом редакторе
+    client.patch("/api/plan/tasks/upstream", params={"session_id": sid}, json={"assignee": "Кто-то"})
+    assert client.post("/api/plan/redo", params={"session_id": sid}).status_code == 409

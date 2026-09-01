@@ -60,6 +60,7 @@ export const api = {
   plan: () => request<PlanPayload>("/plan"),
   reset: () => request<PlanPayload>("/plan/reset", { method: "POST" }),
   undo: () => request<PlanPayload>("/plan/undo", { method: "POST" }),
+  redo: () => request<PlanPayload>("/plan/redo", { method: "POST" }),
 
   importXlsx: (file: File) => {
     const form = new FormData();

@@ -198,6 +198,21 @@ def undo(
     return payload
 
 
+@app.post("/api/plan/redo")
+def redo(
+    session_id: Optional[str] = Query(None),
+    x_session_id: Optional[str] = Header(None),
+) -> dict[str, Any]:
+    sid = resolve_session(session_id, x_session_id)
+    current_plan(sid)
+    plan, message = store.redo(sid)
+    if plan is None:
+        raise HTTPException(status_code=409, detail={"message": message})
+    payload = plan_payload(sid, plan)
+    payload["message"] = message
+    return payload
+
+
 @app.post("/api/plan/import")
 async def import_plan(
     file: UploadFile = File(...),

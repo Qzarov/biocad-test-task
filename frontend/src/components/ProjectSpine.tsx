@@ -94,14 +94,25 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
         </svg>
       </div>
       <div className="spine__legend">
-        <span className="legend-item">
-          <i className="legend-swatch" style={{ background: "var(--plan-critical)" }} /> критический путь
+        <span
+          className="legend-item"
+          title="Задачи без запаса: сдвиньте любую на день — на день уедет и весь проект"
+        >
+          <i className="legend-swatch" style={{ background: "var(--plan-critical)" }} /> критический
+          путь
         </span>
-        <span className="legend-item">
+        <span
+          className="legend-item"
+          title="У задачи есть свободные дни: её можно сдвинуть или растянуть, срок проекта не изменится"
+        >
           <i className="legend-swatch" style={{ background: "var(--plan-normal)" }} /> с запасом
         </span>
-        <span className="legend-item">
-          <i className="legend-swatch" style={{ background: "var(--plan-pinned)" }} /> дата закреплена
+        <span
+          className="legend-item"
+          title="Дата старта задана вручную («не раньше»), а не выведена из зависимостей; зависимости всё равно сильнее"
+        >
+          <i className="legend-swatch" style={{ background: "var(--plan-pinned)" }} /> дата
+          закреплена
         </span>
       </div>
     </div>
