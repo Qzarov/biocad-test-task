@@ -73,6 +73,7 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [view, setView] = useState<ViewWindow>(() => ({ from: 0, days: loadPrefs().windowDays }));
   const [viewport, setViewport] = useState(900);
+  const [geometry, setGeometry] = useState({ originPx: 0, pxPerDay: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [changed, setChanged] = useState<string[]>([]);
@@ -88,6 +89,12 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const highlightTimer = useRef<number | null>(null);
+  // Прокрутка диаграммы бывает двух видов: наша (окно шкалы двигает viewDate) и
+  // пользовательская (ползунок под диаграммой, колесо). Различить их по событию
+  // нельзя, поэтому после своей правки окна короткое время не слушаем скролл —
+  // иначе догоняющее событие возвращало окно назад, и перетаскивание середины
+  // «отскакивало» на отпускании.
+  const ignoreScrollUntil = useRef(0);
 
   const pushToast = useCallback((toast: Omit<Toast, "id">) => {
     setToasts((current) => [...current.slice(-3), { ...toast, id: Date.now() + Math.random() }]);
@@ -228,9 +235,13 @@ export default function App() {
     ),
   );
   const daysPerColumn = DAYS_PER_COLUMN[viewMode] ?? 7;
-  const scrollLeft = schedule
-    ? ((leadDays(viewMode, schedule.project_start) + windowFrom) / daysPerColumn) * columnWidth
+  // Левый край таймлайна — дата начала окна. Прокруткой занимается сама
+  // библиотека (проп viewDate): она знает свою сетку, а прямую запись scrollLeft
+  // перебивает собственным состоянием.
+  const viewDateTime = schedule
+    ? new Date(`${schedule.project_start}T00:00:00`).getTime() + windowFrom * 86400000
     : 0;
+  const viewDate = useMemo(() => new Date(viewDateTime), [viewDateTime]);
   const listWidth = columnsWidth(prefs.columns, prefs.columnWidths);
 
   // Кнопки отмены и возврата ходят по той же истории снимков, что и агент:
@@ -258,6 +269,7 @@ export default function App() {
 
   const setWindow = useCallback(
     (from: number, to: number) => {
+      ignoreScrollUntil.current = Date.now() + 600;
       setView({
         from: Math.max(0, Math.round(from)),
         days: to - from >= totalDays ? null : Math.round(to - from),
@@ -534,17 +546,22 @@ export default function App() {
               columns={prefs.columns}
               columnWidths={prefs.columnWidths}
               numbers={taskNumbers}
-              scrollLeft={scrollLeft}
+              viewDate={viewDate}
               onViewport={setViewport}
+              onGeometry={setGeometry}
               onScrollLeft={(px) => {
                 if (!schedule || totalDays <= windowDays) return;
+                if (Date.now() < ignoreScrollUntil.current) return;
+                // обратный перевод — по замеренной геометрии полосок
                 const day =
-                  (px / Math.max(1, columnWidth)) * daysPerColumn -
-                  leadDays(viewMode, schedule.project_start);
-                setView((current) => ({
-                  ...current,
-                  from: Math.min(Math.max(0, Math.round(day)), totalDays - windowDays),
-                }));
+                  geometry.pxPerDay > 0
+                    ? (px - geometry.originPx) / geometry.pxPerDay
+                    : (px / Math.max(1, columnWidth)) * daysPerColumn -
+                      leadDays(viewMode, schedule.project_start);
+                const next = Math.min(Math.max(0, Math.round(day)), totalDays - windowDays);
+                // мелкие дрожания (округление до колонки) окно не двигают
+                if (Math.abs(next - windowFrom) < 2) return;
+                setView((current) => ({ ...current, from: next }));
               }}
               onColumnWidth={(key, width) =>
                 setPrefs((current) => {

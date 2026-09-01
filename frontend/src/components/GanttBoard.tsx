@@ -37,11 +37,17 @@ interface Props {
   columns: ColumnKey[];
   columnWidths: ColumnWidths;
   numbers: Record<string, number>;
-  /** Позиция прокрутки таймлайна в пикселях — ею управляет шкала над диаграммой. */
-  scrollLeft: number;
+  /** Дата у левого края таймлайна — ею управляет шкала над диаграммой.
+   *  Прокрутку двигаем именно этим пропом: библиотека держит позицию в своём
+   *  состоянии и перебивает прямую запись scrollLeft. */
+  viewDate: Date;
   onColumnWidth: (key: ColumnKey | "name", width: number | null) => void;
   /** Ширина видимой части таймлайна: из неё считается масштаб под окно просмотра. */
   onViewport: (width: number) => void;
+  /** Замеренная геометрия таймлайна: где в контенте лежит старт проекта и
+   *  сколько пикселей приходится на день. Считать это из правил библиотеки
+   *  нельзя: она по-разному расширяет диапазон для дня, недели и месяца. */
+  onGeometry: (geometry: { originPx: number; pxPerDay: number }) => void;
   onScrollLeft: (px: number) => void;
   changed: string[];
   selectedId: string | null;
@@ -60,9 +66,10 @@ export function GanttBoard({
   columns,
   columnWidths,
   numbers,
-  scrollLeft,
+  viewDate,
   onColumnWidth,
   onViewport,
+  onGeometry,
   onScrollLeft,
   changed,
   selectedId,
@@ -128,19 +135,39 @@ export function GanttBoard({
     };
   }, [onViewport, onScrollLeft]);
 
+  // Геометрию снимаем с самих полосок: берём две задачи с разными датами старта
+  // и получаем масштаб и точку отсчёта прямо из отрисованного, без догадок о
+  // том, как библиотека строит сетку.
   useEffect(() => {
     const node = scroller.current;
-    if (!node) return;
-    const room = node.scrollWidth - node.clientWidth;
-    const target = Math.round(Math.min(room, Math.max(0, scrollLeft)));
-    if (Math.abs(node.scrollLeft - target) < 2) return;
-    programmatic.current = true;
-    node.scrollLeft = target;
-    // снимаем флаг после того, как браузер разошлёт события скролла
-    window.setTimeout(() => {
-      programmatic.current = false;
-    }, 120);
-  }, [scrollLeft, columnWidth, schedule]);
+    const element = frame.current;
+    if (!node || !element || schedule.tasks.length === 0) return;
+
+    const measure = () => {
+      const bars = Array.from(element.querySelectorAll(".handleGroup"));
+      if (bars.length !== schedule.tasks.length) return;
+      const base = node.getBoundingClientRect().left - node.scrollLeft;
+      const points = schedule.tasks.map((task, index) => ({
+        day: Math.round(
+          (new Date(`${task.start}T00:00:00`).getTime() -
+            new Date(`${schedule.project_start}T00:00:00`).getTime()) /
+            86400000,
+        ),
+        px: bars[index].getBoundingClientRect().left - base,
+      }));
+      const first = points[0];
+      const other = points.find((point) => point.day !== first.day);
+      if (!other) return;
+      const pxPerDay = (other.px - first.px) / (other.day - first.day);
+      if (!Number.isFinite(pxPerDay) || pxPerDay <= 0) return;
+      onGeometry({ originPx: first.px - first.day * pxPerDay, pxPerDay });
+    };
+
+    const timer = window.setTimeout(measure, 60);
+    return () => window.clearTimeout(timer);
+  }, [schedule, columnWidth, columns, columnWidths, onGeometry]);
+
+
 
   const byId = useMemo(() => {
     const map = new Map<string, ScheduledTask>();
@@ -442,7 +469,7 @@ export function GanttBoard({
       <Gantt
         tasks={tasks}
         viewMode={viewMode}
-        viewDate={new Date(`${schedule.project_start}T00:00:00`)}
+        viewDate={viewDate}
         preStepsCount={1}
         locale="ru-RU"
         listCellWidth={listWidth}
