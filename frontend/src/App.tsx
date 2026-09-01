@@ -460,11 +460,7 @@ export default function App() {
     <div className="app">
       <header className="masthead">
         <div className="masthead__identity">
-          <div className="masthead__eyebrow">
-            <span>План проекта</span>
-            <span className="num">сессия {sessionId()}</span>
-          </div>
-          <h1>{plan?.title ?? "План проекта"}</h1>
+          <h1 title={`сессия ${sessionId()}`}>{plan?.title ?? "План проекта"}</h1>
           <div className="stats">
             <label className="stats__item">
               <span className="stats__label">старт</span>
@@ -578,8 +574,6 @@ export default function App() {
             <span className="btn__label">Шаблон</span>
           </a>
         </div>
-
-        {schedule && <ProjectSpine schedule={schedule} />}
       </header>
 
       <div className="workspace">
@@ -743,6 +737,8 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {schedule && <ProjectSpine schedule={schedule} />}
         </section>
 
         {(!narrow || chatExpanded) && (

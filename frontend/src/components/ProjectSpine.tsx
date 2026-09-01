@@ -2,8 +2,8 @@ import type { Schedule } from "../types";
 
 /** The project spine: every task drawn once on a shared time axis.
  *
- * It answers three questions at a glance that the chart below needs scrolling
- * for — how long the project runs, where the work piles up, and how much of it
+ * Stands under the chart as its mini-map: it answers three questions at a glance
+ * that the chart above needs scrolling for — how long the project runs, where the work piles up, and how much of it
  * sits on the critical path. Lanes are filled round-robin, so density is real
  * information: a crowded stretch is a crowded month. */
 export function ProjectSpine({ schedule }: { schedule: Schedule }) {
@@ -34,7 +34,6 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
 
   return (
     <div className="spine">
-      <span className="label">Спайн проекта</span>
       <div className="spine__scale">
         <svg
           className="spine__svg"
