@@ -13,6 +13,8 @@ export interface Prefs {
   windowDays: number | null;
   /** Масштаб мобильного вида: там вместо окна просмотра фиксированный шаг. */
   mobileStep: "day" | "week" | "month";
+  /** Что показывать на телефоне: полосы или карточки. По умолчанию полосы. */
+  mobileView: "chart" | "list";
   model: string | null;
 }
 
@@ -21,6 +23,7 @@ export const DEFAULT_PREFS: Prefs = {
   columnWidths: {},
   windowDays: null,
   mobileStep: "week",
+  mobileView: "chart",
   model: null,
 };
 
@@ -41,6 +44,7 @@ export function loadPrefs(): Prefs {
           : null,
       mobileStep:
         parsed.mobileStep === "day" || parsed.mobileStep === "month" ? parsed.mobileStep : "week",
+      mobileView: parsed.mobileView === "list" ? "list" : "chart",
       model: typeof parsed.model === "string" ? parsed.model : null,
     };
   } catch {

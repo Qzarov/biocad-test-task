@@ -15,6 +15,7 @@ import { ColumnPicker, columnsWidth } from "./components/ColumnPicker";
 import { GanttBoard } from "./components/GanttBoard";
 import { ProjectSpine } from "./components/ProjectSpine";
 import { EMPTY_FILTERS, TableFilter, applyFilters, isFilterActive } from "./components/TableFilter";
+import { TaskCards } from "./components/TaskCards";
 import { TaskModal } from "./components/TaskModal";
 import { MIN_WINDOW_DAYS, TimeBrush } from "./components/TimeBrush";
 import { Toasts, type Toast } from "./components/Toasts";
@@ -98,6 +99,7 @@ export default function App() {
   const [loadingHistory, setLoadingHistory] = useState(true);
   // На телефоне чат по умолчанию свёрнут: развёрнутый он забирает половину
   // экрана у диаграммы, а открыть его — одно нажатие.
+  const [chatExpanded, setChatExpanded] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches,
   );
@@ -289,6 +291,8 @@ export default function App() {
     },
     [totalDays, narrow, visibleDays],
   );
+  // На телефоне в режиме диаграммы колонки списка скрываются совсем: 200 пикселей
+  // названий отнимали место у полос, а имя видно над полоской и в карточке.
   const visibleColumns = narrow ? [] : prefs.columns;
   const visibleWidths = narrow
     ? { ...prefs.columnWidths, name: Math.min(168, prefs.columnWidths.name ?? 236) }
@@ -580,7 +584,28 @@ export default function App() {
       <div className="workspace">
         <section className="chart">
           <div className="chart__bars">
-            <div className="chart__bar chart__bar--list" style={{ width: listWidth }}>
+            <div
+              className="chart__bar chart__bar--list"
+              style={narrow ? undefined : { width: listWidth }}
+            >
+              {narrow && (
+                <div className="frox-tabs chart__views" role="group" aria-label="Вид плана">
+                  <button
+                    className={`frox-tab${prefs.mobileView === "chart" ? " frox-tab-active" : ""}`}
+                    aria-pressed={prefs.mobileView === "chart"}
+                    onClick={() => setPrefs((current) => ({ ...current, mobileView: "chart" }))}
+                  >
+                    Диаграмма
+                  </button>
+                  <button
+                    className={`frox-tab${prefs.mobileView === "list" ? " frox-tab-active" : ""}`}
+                    aria-pressed={prefs.mobileView === "list"}
+                    onClick={() => setPrefs((current) => ({ ...current, mobileView: "list" }))}
+                  >
+                    Список
+                  </button>
+                </div>
+              )}
               <TableFilter
                 filters={filters}
                 assignees={assigneeOptions}
@@ -601,16 +626,17 @@ export default function App() {
             <div className="chart__bar chart__bar--time">
               {narrow ? (
                 <div className="frox-tabs chart__steps" role="group" aria-label="Масштаб таймлайна">
-                  {MOBILE_STEPS.map((step) => (
+                  {prefs.mobileView === "chart" &&
+                    MOBILE_STEPS.map((step) => (
                     <button
                       key={step.key}
                       className={`frox-tab${prefs.mobileStep === step.key ? " frox-tab-active" : ""}`}
                       aria-pressed={prefs.mobileStep === step.key}
                       onClick={() => setPrefs((current) => ({ ...current, mobileStep: step.key }))}
                     >
-                      {step.label}
-                    </button>
-                  ))}
+                        {step.label}
+                      </button>
+                    ))}
                 </div>
               ) : (
                 <>
@@ -631,13 +657,26 @@ export default function App() {
             </div>
           </div>
 
-          {visibleSchedule ? (
+          {narrow && prefs.mobileView === "list" ? (
+            <TaskCards
+              tasks={visibleTasks}
+              numbers={taskNumbers}
+              changed={changed}
+              filtered={isFilterActive(filters)}
+              onOpen={(id) => {
+                setSelectedId(id);
+                setOpenTaskId(id);
+              }}
+              onResetFilters={() => setFilters(EMPTY_FILTERS)}
+            />
+          ) : visibleSchedule ? (
             <GanttBoard
               schedule={visibleSchedule}
               viewMode={viewMode}
               columnWidth={columnWidth}
               columns={visibleColumns}
               columnWidths={visibleWidths}
+              hideList={narrow}
               numbers={taskNumbers}
               viewDate={viewDate}
               onViewport={setViewport}
@@ -693,8 +732,13 @@ export default function App() {
           model={prefs.model}
           mentions={mentions}
           loadingHistory={loadingHistory}
-          collapsed={chatCollapsed}
+          collapsed={chatCollapsed && !chatExpanded}
+          expanded={chatExpanded}
           onToggle={() => setChatCollapsed((value) => !value)}
+          onToggleExpand={() => {
+            setChatExpanded((value) => !value);
+            setChatCollapsed(false);
+          }}
           onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
           onSend={sendMessage}
           onStop={() => abort.current?.abort()}

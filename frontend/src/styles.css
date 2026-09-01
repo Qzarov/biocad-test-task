@@ -1007,6 +1007,133 @@ body.is-dragging-row * {
   color: var(--text-body);
 }
 
+/* --- список задач карточками (мобильный вид) ------------------------------ */
+
+.cards {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.cards--empty {
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.cards--empty strong {
+  color: var(--text-primary);
+}
+
+.card {
+  /* прокручиваемая колонка — flex-контейнер: без запрета сжатия карточка
+     ужимается под доступную высоту, а содержимое срезает overflow */
+  flex: none;
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: 0 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.card:hover,
+.card:focus-visible {
+  border-color: var(--border-input);
+}
+
+.card--changed {
+  background: var(--success-soft);
+}
+
+.card__stripe {
+  background: var(--plan-normal);
+}
+
+.card--critical .card__stripe {
+  background: var(--plan-critical);
+}
+
+.card--blocked .card__stripe {
+  background: var(--danger);
+}
+
+.card--done .card__stripe {
+  background: var(--accent);
+}
+
+.card__body {
+  padding: 11px 13px 12px 0;
+  min-width: 0;
+}
+
+.card__top {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.card__num {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.card__name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.card--done .card__name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-input);
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.card__dates {
+  color: var(--text-body);
+}
+
+.card__dot {
+  color: var(--border-input);
+}
+
+.card__bar {
+  margin-top: 9px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.card__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--success);
+}
+
 /* --- чат ------------------------------------------------------------------ */
 
 .chat {
@@ -1050,16 +1177,50 @@ body.is-dragging-row * {
   min-height: 0;
 }
 
+/* Раскрытый агент занимает весь экран: чат — основной инструмент правок, и
+   иногда нужен целиком, а не полосой сбоку. */
+.chat--expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border-left: 0;
+  animation: chat-open 0.16s ease-out;
+}
+
+@keyframes chat-open {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.chat--expanded .chat__log,
+.chat--expanded .chat__composer {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
 .chat--collapsed .chat__log,
 .chat--collapsed .chat__composer,
 .chat--collapsed .notice {
   display: none;
 }
 
-.chat__model-picker {
-  flex: 1;
+.chat__head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  max-width: 260px;
+}
+
+.chat__model-picker {
+  min-width: 0;
+  max-width: 220px;
 }
 
 .chat__model-picker .frox-select {
@@ -1535,18 +1696,21 @@ body.is-dragging-row * {
   margin-top: 10px;
 }
 
+/* Чипы держат ту же семантику, что цвета диаграммы: зелёный — критический путь
+   (главное содержание плана), нейтральный — запас, красный — блокировка. До этого
+   было наоборот: «критический путь» красным, а «запас» зелёным. */
 .chip {
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: rgba(127, 127, 127, 0.16);
+  color: var(--text-secondary);
 }
 
 .chip--critical {
-  background: var(--danger-soft);
-  color: var(--danger);
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
 .chip--pinned {
@@ -1808,8 +1972,21 @@ body.is-dragging-row * {
     grid-template-rows: minmax(240px, 1fr) minmax(280px, 52vh);
   }
 
-  .chart__steps {
+  .chart__steps,
+  .chart__views {
     flex: none;
+  }
+
+  /* В режиме диаграммы список библиотеки скрыт, и полосам нужна подпись:
+     на телефоне это единственное место, где видно название задачи. */
+  .chart__frame--bars-only .bar text {
+    display: block;
+    fill: #ffffff;
+    font-weight: 600;
+  }
+
+  .cards {
+    padding: 0 2px;
   }
 
   .chart__bar--time {

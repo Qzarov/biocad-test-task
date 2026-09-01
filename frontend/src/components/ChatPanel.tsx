@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatEntry, Health, Mention, ModelInfo, ToolTrace } from "../types";
-import { ChevronDown, ChevronUp, Send, Square } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Send, Square } from "lucide-react";
 import { Collapsible } from "./Collapsible";
 
 const SUGGESTIONS = [
@@ -37,7 +37,9 @@ interface Props {
   mentions: Mention[];
   onModelChange: (model: string) => void;
   collapsed: boolean;
+  expanded: boolean;
   onToggle: () => void;
+  onToggleExpand: () => void;
   onSend: (message: string) => void;
   onStop: () => void;
 }
@@ -52,7 +54,9 @@ export function ChatPanel({
   mentions,
   onModelChange,
   collapsed,
+  expanded,
   onToggle,
+  onToggleExpand,
   onSend,
   onStop,
 }: Props) {
@@ -133,7 +137,7 @@ export function ChatPanel({
 
   return (
     <section
-      className={`chat${collapsed ? " chat--collapsed" : ""}`}
+      className={`chat${collapsed ? " chat--collapsed" : ""}${expanded ? " chat--expanded" : ""}`}
       aria-label="Чат с агентом-планировщиком"
     >
       <header className="chat__head">
@@ -147,27 +151,40 @@ export function ChatPanel({
           <span className="chat__title">Агент плана</span>
         </button>
 
-        {models.length > 0 ? (
-          <label className="chat__model-picker">
-            <select
-              className="frox-select"
-              value={model ?? ""}
-              disabled={streaming}
-              onChange={(event) => onModelChange(event.target.value)}
-              title="Модель меняется на следующий запрос"
-            >
-              {models.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label} · {option.vendor}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <div className="chat__model">
-            {health?.llm_configured ? health.model : "модель не настроена"}
-          </div>
-        )}
+        <div className="chat__head-right">
+          {models.length > 0 ? (
+            <label className="chat__model-picker">
+              <select
+                className="frox-select"
+                value={model ?? ""}
+                disabled={streaming}
+                onChange={(event) => onModelChange(event.target.value)}
+                title="Модель меняется на следующий запрос"
+              >
+                {models.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} · {option.vendor}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="chat__model">
+              {health?.llm_configured ? health.model : "модель не настроена"}
+            </div>
+          )}
+
+          <button
+            className="icon-btn chat__expand"
+            onClick={onToggleExpand}
+            aria-pressed={expanded}
+            title={expanded ? "Свернуть агента к панели" : "Раскрыть агента на весь экран"}
+            aria-label={expanded ? "Свернуть агента" : "Раскрыть агента на весь экран"}
+          >
+            {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        </div>
+
       </header>
 
       {health && !health.llm_configured && (

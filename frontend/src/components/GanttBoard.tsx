@@ -37,6 +37,9 @@ interface Props {
   columns: ColumnKey[];
   columnWidths: ColumnWidths;
   numbers: Record<string, number>;
+  /** Спрятать колонку списка совсем (мобильная диаграмма): таймлайн получает всю
+   *  ширину, а название задачи рисуется подписью у полоски. */
+  hideList?: boolean;
   /** Дата у левого края таймлайна — ею управляет шкала над диаграммой.
    *  Прокрутку двигаем именно этим пропом: библиотека держит позицию в своём
    *  состоянии и перебивает прямую запись scrollLeft. */
@@ -72,6 +75,7 @@ export function GanttBoard({
   columns,
   columnWidths,
   numbers,
+  hideList = false,
   viewDate,
   onColumnWidth,
   onViewport,
@@ -603,14 +607,14 @@ export function GanttBoard({
   };
 
   return (
-    <div className="chart__frame" ref={frame}>
+    <div className={`chart__frame${hideList ? " chart__frame--bars-only" : ""}`} ref={frame}>
       <Gantt
         tasks={tasks}
         viewMode={viewMode}
         viewDate={viewDate}
         preStepsCount={1}
         locale="ru-RU"
-        listCellWidth={listWidth}
+        listCellWidth={hideList ? "" : listWidth}
         columnWidth={columnWidth}
         rowHeight={40}
         headerHeight={HEADER_HEIGHT}
