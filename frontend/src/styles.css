@@ -906,8 +906,30 @@ body.is-resizing * {
   opacity: 1;
 }
 
+/* Пока строку держат — она «набирает вес», и когда перенос начался, заметно
+   приподнимается: без этого на телефоне непонятно, сработало удержание или нет. */
+.gantt-row--pressing {
+  background: var(--accent-soft);
+  animation: row-press 0.42s ease-out forwards;
+}
+
+@keyframes row-press {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.985);
+  }
+}
+
 .gantt-row--dragging {
-  opacity: 0.45;
+  opacity: 0.9;
+  background: var(--bg-surface-alt);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  transform: scale(1.015);
+  transition: transform 0.14s ease-out, box-shadow 0.14s ease-out;
+  z-index: 3;
+  position: relative;
 }
 
 body.is-dragging-row,
@@ -1002,6 +1024,36 @@ body.is-dragging-row * {
   gap: 12px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Свёрнутый чат оставляет только свою шапку: диаграмма получает весь экран, а
+   развернуть — одно нажатие. */
+.chat__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-primary);
+}
+
+.chat__toggle svg {
+  color: var(--text-muted);
+}
+
+.chat__toggle:hover svg {
+  color: var(--accent-text);
+}
+
+.chat--collapsed {
+  min-height: 0;
+}
+
+.chat--collapsed .chat__log,
+.chat--collapsed .chat__composer,
+.chat--collapsed .notice {
+  display: none;
 }
 
 .chat__model-picker {
@@ -1741,6 +1793,23 @@ body.is-dragging-row * {
 
   .chart__bar--list > .dropdown {
     display: none;
+  }
+
+  /* Чат сворачивается в одну строку, и раскладка перестаёт делить экран пополам. */
+  .workspace {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .workspace:has(.chat:not(.chat--collapsed)) {
+    grid-template-rows: minmax(240px, 1fr) minmax(280px, 52vh);
+  }
+
+  .chart__steps {
+    flex: none;
+  }
+
+  .chart__bar--time {
+    justify-content: flex-start;
   }
 
   /* Панель над списком равна ширине списка (её задаёт инлайн-стиль), а на узком

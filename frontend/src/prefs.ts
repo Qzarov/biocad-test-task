@@ -11,6 +11,8 @@ export interface Prefs {
   // Длина окна просмотра в днях; null — «весь проект». Позиция окна не
   // сохраняется: возвращаться хочется к масштабу, а не к месту прокрутки.
   windowDays: number | null;
+  /** Масштаб мобильного вида: там вместо окна просмотра фиксированный шаг. */
+  mobileStep: "day" | "week" | "month";
   model: string | null;
 }
 
@@ -18,6 +20,7 @@ export const DEFAULT_PREFS: Prefs = {
   columns: ["assignee", "duration"],
   columnWidths: {},
   windowDays: null,
+  mobileStep: "week",
   model: null,
 };
 
@@ -36,6 +39,8 @@ export function loadPrefs(): Prefs {
         typeof parsed.windowDays === "number" && parsed.windowDays > 0
           ? Math.round(parsed.windowDays)
           : null,
+      mobileStep:
+        parsed.mobileStep === "day" || parsed.mobileStep === "month" ? parsed.mobileStep : "week",
       model: typeof parsed.model === "string" ? parsed.model : null,
     };
   } catch {

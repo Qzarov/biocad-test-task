@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatEntry, Health, Mention, ModelInfo, ToolTrace } from "../types";
-import { Send, Square } from "lucide-react";
+import { ChevronDown, ChevronUp, Send, Square } from "lucide-react";
 import { Collapsible } from "./Collapsible";
 
 const SUGGESTIONS = [
@@ -36,6 +36,8 @@ interface Props {
   model: string | null;
   mentions: Mention[];
   onModelChange: (model: string) => void;
+  collapsed: boolean;
+  onToggle: () => void;
   onSend: (message: string) => void;
   onStop: () => void;
 }
@@ -49,6 +51,8 @@ export function ChatPanel({
   model,
   mentions,
   onModelChange,
+  collapsed,
+  onToggle,
   onSend,
   onStop,
 }: Props) {
@@ -128,9 +132,20 @@ export function ChatPanel({
   const menuOpen = mentionQuery !== null && matches.length > 0;
 
   return (
-    <section className="chat" aria-label="Чат с агентом-планировщиком">
+    <section
+      className={`chat${collapsed ? " chat--collapsed" : ""}`}
+      aria-label="Чат с агентом-планировщиком"
+    >
       <header className="chat__head">
-        <div className="chat__title">Агент плана</div>
+        <button
+          className="chat__toggle"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          title={collapsed ? "Развернуть чат" : "Свернуть чат, чтобы не мешал диаграмме"}
+        >
+          {collapsed ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          <span className="chat__title">Агент плана</span>
+        </button>
 
         {models.length > 0 ? (
           <label className="chat__model-picker">

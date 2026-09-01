@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Gantt, ViewMode, type Task as GanttTask } from "gantt-task-react";
 import { GripVertical } from "lucide-react";
 import "gantt-task-react/dist/index.css";
@@ -90,6 +90,71 @@ export function GanttBoard({
   const frame = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(520);
 
+  // Перетаскивание строк меняет только порядок в списке; чтобы это работало и
+  // при включённом фильтре, на сервер уходит не номер строки, а «до/после» какой
+  // задачи её поставить.
+  //
+  // Реализация на pointer-событиях, а не на HTML5 drag-and-drop: тянуть можно
+  // только за ручку (значит выделение текста и клики по строке не ломаются), и
+  // поведение одинаково для мыши, трекпада и тача.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ id: string; position: "before" | "after" } | null>(
+    null,
+  );
+  // строка, которую держат пальцем: подсвечиваем ожидание переноса
+  const [pressing, setPressing] = useState<string | null>(null);
+
+  // Начать перенос строки. Вызывается из двух мест: ручка слева (мышь) и долгое
+  // нажатие на строку (палец) — поведение и результат одинаковые.
+  const beginReorder = useCallback(
+    (taskId: string) => {
+      setDragId(taskId);
+      document.body.classList.add("is-dragging-row");
+
+      let hint: { id: string; position: "before" | "after" } | null = null;
+
+      const move = (moveEvent: PointerEvent) => {
+        moveEvent.preventDefault();
+        const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        const row = element?.closest<HTMLElement>(".gantt-row");
+        const overId = row?.dataset.taskId;
+        if (!row || !overId || overId === taskId) {
+          hint = null;
+          setDropHint(null);
+          return;
+        }
+        const box = row.getBoundingClientRect();
+        hint = {
+          id: overId,
+          position: moveEvent.clientY < box.top + box.height / 2 ? "before" : "after",
+        };
+        setDropHint(hint);
+      };
+
+      const finish = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+        document.body.classList.remove("is-dragging-row");
+        if (hint && hint.id !== taskId) onReorder(taskId, hint.id, hint.position);
+        setDragId(null);
+        setDropHint(null);
+      };
+
+      window.addEventListener("pointermove", move, { passive: false });
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    },
+    [onReorder],
+  );
+
+  const startRowDrag = (taskId: string) => (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    beginReorder(taskId);
+  };
+
   useEffect(() => {
     const element = frame.current;
     if (!element) return;
@@ -104,6 +169,20 @@ export function GanttBoard({
   // диаграммой управляет им напрямую, а обратно мы слушаем скролл, чтобы шкала
   // не отставала, если человек прокрутил колесом или ползунком.
   const scroller = useRef<HTMLElement | null>(null);
+
+  // Жесты навешиваются один раз за жизнь компонента, а свежие колбэки читают из
+  // ref: раньше обработчики висели в эффекте с зависимостями, и любая
+  // перерисовка (а их много — прокрутка, замер геометрии) снимала слушатели
+  // вместе с таймером удержания, из-за чего жест не срабатывал вовсе.
+  const panRef = useRef(onPan);
+  const pxPerDayRef = useRef(pxPerDay);
+  const beginReorderRef = useRef(beginReorder);
+
+  useEffect(() => {
+    panRef.current = onPan;
+    pxPerDayRef.current = pxPerDay;
+    beginReorderRef.current = beginReorder;
+  }, [onPan, pxPerDay, beginReorder]);
 
   useEffect(() => {
     const element = frame.current;
@@ -122,6 +201,21 @@ export function GanttBoard({
     const observer = new MutationObserver(attach);
     observer.observe(element, { childList: true, subtree: true });
 
+    const sizes = new ResizeObserver(() => {
+      if (scroller.current) onViewport(scroller.current.clientWidth);
+    });
+    if (scroller.current) sizes.observe(scroller.current);
+
+    return () => {
+      observer.disconnect();
+      sizes.disconnect();
+    };
+  }, [onViewport]);
+
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+
     // Горизонтальное колесо (и Shift+колесо) перехватываем на погружении, до
     // обработчика библиотеки: пусть двигается окно, а диаграмма следует за ним.
     const onWheel = (event: WheelEvent) => {
@@ -130,30 +224,60 @@ export function GanttBoard({
       event.preventDefault();
       event.stopPropagation();
       const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
-      const perDay = pxPerDay > 0 ? pxPerDay : 6;
-      onPan(delta / perDay);
+      const perDay = pxPerDayRef.current > 0 ? pxPerDayRef.current : 6;
+      panRef.current(delta / perDay);
     };
     element.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
-    // Перетаскивание пустого поля таймлайна — единственный способ двигать
-    // диаграмму пальцем: колеса на тач-устройствах нет, а полосу прокрутки мы
-    // убрали. Полоски задач и список не трогаем: там свои жесты.
+    // Один автомат на все жесты внутри диаграммы:
+    //   • сдвиг в сторону (по полю или по списку задач) — прокрутка по времени;
+    //   • сдвиг вверх-вниз — обычная прокрутка списка, отдаём странице;
+    //   • нажатие и удержание на строке — перенос задачи (на телефоне это
+    //     единственный способ: свайп там занят прокруткой).
+    const LONG_PRESS_MS = 420;
+    const AXIS_THRESHOLD = 6;
+
     let panning = false;
     let axis: "x" | "y" | null = null;
     let startX = 0;
     let startY = 0;
     let lastX = 0;
+    let pressTimer = 0;
+    let pressedRow: string | null = null;
+
+    const cancelPress = () => {
+      if (pressTimer) {
+        window.clearTimeout(pressTimer);
+        pressTimer = 0;
+      }
+      pressedRow = null;
+      setPressing(null);
+    };
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const target = event.target as HTMLElement | null;
-      if (!target || target.closest(".handleGroup") || target.closest(".gantt-row") || target.closest(".gantt-head")) {
-        return;
-      }
+      // ручка ширины колонки и ручка переноса — свои жесты
+      if (!target || target.closest(".col-resizer") || target.closest(".gantt-row__grip")) return;
+
       panning = true;
       axis = null;
       startX = lastX = event.clientX;
       startY = event.clientY;
+
+      const row = target.closest<HTMLElement>(".gantt-row");
+      const rowId = row?.dataset.taskId ?? null;
+      if (rowId) {
+        pressedRow = rowId;
+        setPressing(rowId);
+        pressTimer = window.setTimeout(() => {
+          pressTimer = 0;
+          panning = false;
+          setPressing(null);
+          if (pressedRow) beginReorderRef.current(pressedRow);
+          pressedRow = null;
+        }, LONG_PRESS_MS);
+      }
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -161,8 +285,8 @@ export function GanttBoard({
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
       if (!axis) {
-        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-        // вертикальный жест отдаём странице: список должен прокручиваться
+        if (Math.abs(dx) < AXIS_THRESHOLD && Math.abs(dy) < AXIS_THRESHOLD) return;
+        cancelPress();
         axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
         if (axis === "y") {
           panning = false;
@@ -171,12 +295,13 @@ export function GanttBoard({
         document.body.classList.add("is-panning");
       }
       event.preventDefault();
-      const perDay = pxPerDay > 0 ? pxPerDay : 6;
-      onPan(-(event.clientX - lastX) / perDay);
+      const perDay = pxPerDayRef.current > 0 ? pxPerDayRef.current : 6;
+      panRef.current(-(event.clientX - lastX) / perDay);
       lastX = event.clientX;
     };
 
     const stopPan = () => {
+      cancelPress();
       panning = false;
       axis = null;
       document.body.classList.remove("is-panning");
@@ -187,14 +312,7 @@ export function GanttBoard({
     window.addEventListener("pointerup", stopPan);
     window.addEventListener("pointercancel", stopPan);
 
-    const sizes = new ResizeObserver(() => {
-      if (scroller.current) onViewport(scroller.current.clientWidth);
-    });
-    if (scroller.current) sizes.observe(scroller.current);
-
     return () => {
-      observer.disconnect();
-      sizes.disconnect();
       element.removeEventListener("wheel", onWheel, true);
       element.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
@@ -202,7 +320,10 @@ export function GanttBoard({
       window.removeEventListener("pointercancel", stopPan);
       stopPan();
     };
-  }, [onViewport, onPan, pxPerDay]);
+    // навешиваем один раз: колбэки берутся из ref, иначе жесты рвутся на
+    // каждой перерисовке
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Геометрию снимаем с самих полосок: берём две задачи с разными датами старта
   // и получаем масштаб и точку отсчёта прямо из отрисованного, без догадок о
@@ -255,59 +376,6 @@ export function GanttBoard({
     : columnWidths;
   const listWidth = `${columnsWidth(columns, effectiveWidths)}px`;
   const template = gridTemplate(columns, effectiveWidths);
-
-  // Перетаскивание строк меняет только порядок в списке; чтобы это работало и
-  // при включённом фильтре, на сервер уходит не номер строки, а «до/после» какой
-  // задачи её поставить.
-  //
-  // Реализация на pointer-событиях, а не на HTML5 drag-and-drop: тянуть можно
-  // только за ручку (значит выделение текста и клики по строке не ломаются), и
-  // поведение одинаково для мыши, трекпада и тача.
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dropHint, setDropHint] = useState<{ id: string; position: "before" | "after" } | null>(
-    null,
-  );
-
-  const startRowDrag = (taskId: string) => (event: React.PointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setDragId(taskId);
-    document.body.classList.add("is-dragging-row");
-
-    let hint: { id: string; position: "before" | "after" } | null = null;
-
-    const move = (moveEvent: PointerEvent) => {
-      const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-      const row = element?.closest<HTMLElement>(".gantt-row");
-      const overId = row?.dataset.taskId;
-      if (!row || !overId || overId === taskId) {
-        hint = null;
-        setDropHint(null);
-        return;
-      }
-      const box = row.getBoundingClientRect();
-      hint = {
-        id: overId,
-        position: moveEvent.clientY < box.top + box.height / 2 ? "before" : "after",
-      };
-      setDropHint(hint);
-    };
-
-    const finish = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-      document.body.classList.remove("is-dragging-row");
-      if (hint && hint.id !== taskId) onReorder(taskId, hint.id, hint.position);
-      setDragId(null);
-      setDropHint(null);
-    };
-
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-  };
 
   const resizer = (key: ColumnKey | "name", label: string) => (
     <ColumnResizer
@@ -441,6 +509,7 @@ export function GanttBoard({
         if (row.id === selectedId) classes.push("gantt-row--selected");
         if (changedSet.has(row.id)) classes.push("gantt-row--changed");
         if (dragId === row.id) classes.push("gantt-row--dragging");
+        if (pressing === row.id) classes.push("gantt-row--pressing");
         if (task?.status === "done") classes.push("gantt-row--done");
         if (task?.status === "blocked") classes.push("gantt-row--blocked");
         if (dropHint?.id === row.id) classes.push(`gantt-row--drop-${dropHint.position}`);

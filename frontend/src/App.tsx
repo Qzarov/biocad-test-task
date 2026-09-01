@@ -46,6 +46,15 @@ const DAYS_PER_COLUMN: Partial<Record<ViewMode, number>> = {
   [ViewMode.Month]: 30.44,
 };
 
+/** Мобильный вид: фиксированный масштаб вместо окна просмотра. На экране в
+ *  230 пикселей таймлайна окно всё равно упиралось в минимальную ширину колонки,
+ *  и ползунок перестал что-либо менять — честнее дать три понятных шага. */
+const MOBILE_STEPS: { key: "day" | "week" | "month"; mode: ViewMode; label: string; column: number }[] = [
+  { key: "day", mode: ViewMode.Day, label: "Дни", column: 40 },
+  { key: "week", mode: ViewMode.Week, label: "Недели", column: 64 },
+  { key: "month", mode: ViewMode.Month, label: "Месяцы", column: 104 },
+];
+
 const STEP_LABELS: Partial<Record<ViewMode, string>> = {
   [ViewMode.Day]: "дни",
   [ViewMode.Week]: "недели",
@@ -87,6 +96,11 @@ export default function App() {
   const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  // На телефоне чат по умолчанию свёрнут: развёрнутый он забирает половину
+  // экрана у диаграммы, а открыть его — одно нажатие.
+  const [chatCollapsed, setChatCollapsed] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches,
+  );
   const [busy, setBusy] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -225,10 +239,10 @@ export default function App() {
     Math.max(MIN_WINDOW_DAYS, view.days ?? (totalDays || MIN_WINDOW_DAYS)),
     Math.max(MIN_WINDOW_DAYS, totalDays || MIN_WINDOW_DAYS),
   );
-  const windowFrom = Math.min(Math.max(0, view.from), Math.max(0, totalDays - windowDays));
-  const windowTo = windowFrom + windowDays;
-  const viewMode = stepFor(windowDays);
-  const columnWidth = Math.round(
+  const windowTo = Math.min(totalDays, view.from + windowDays);
+  const mobile = MOBILE_STEPS.find((step) => step.key === prefs.mobileStep) ?? MOBILE_STEPS[1];
+  const viewMode = narrow ? mobile.mode : stepFor(windowDays);
+  const desktopColumnWidth = Math.round(
     Math.min(
       420,
       Math.max(
@@ -239,7 +253,18 @@ export default function App() {
       ),
     ),
   );
+  const columnWidth = narrow ? mobile.column : desktopColumnWidth;
   const daysPerColumn = DAYS_PER_COLUMN[viewMode] ?? 7;
+
+  // Сколько дней реально видно: на большом экране это окно шкалы, на мобиле —
+  // сколько влезло при выбранном шаге. Именно этой величиной ограничивается
+  // позиция прокрутки: раньше на мобиле она обрезалась длиной «настольного»
+  // окна (весь проект), поэтому смещение всегда сбрасывалось в ноль и свайп
+  // ничего не двигал.
+  const visibleDays = narrow
+    ? Math.max(1, (viewport / Math.max(1, columnWidth)) * daysPerColumn)
+    : windowDays;
+  const windowFrom = Math.min(Math.max(0, view.from), Math.max(0, totalDays - visibleDays));
   // Левый край таймлайна — дата начала окна. Прокруткой занимается сама
   // библиотека (проп viewDate): она знает свою сетку, а прямую запись scrollLeft
   // перебивает собственным состоянием.
@@ -255,14 +280,14 @@ export default function App() {
     (days: number) => {
       if (!Number.isFinite(days) || Math.abs(days) < 0.01) return;
       setView((current) => {
-        const length = current.days ?? totalDays;
+        const length = narrow ? visibleDays : current.days ?? totalDays;
         const limit = Math.max(0, totalDays - length);
         if (limit === 0) return current;
         const next = Math.min(limit, Math.max(0, current.from + days));
         return Math.round(next) === Math.round(current.from) ? current : { ...current, from: next };
       });
     },
-    [totalDays],
+    [totalDays, narrow, visibleDays],
   );
   const visibleColumns = narrow ? [] : prefs.columns;
   const visibleWidths = narrow
@@ -305,7 +330,7 @@ export default function App() {
         windowDays: to - from >= totalDays ? null : Math.round(to - from),
       }));
     },
-    [totalDays],
+    [totalDays, narrow, visibleDays],
   );
 
   // Номер задачи — её позиция в плане (не в отфильтрованном списке): именно этот
@@ -351,6 +376,7 @@ export default function App() {
         { id: turnId, role: "agent", text: "", tools: [], pending: true },
       ]);
       setStreaming(true);
+      setChatCollapsed(false);
       abort.current = new AbortController();
 
       const patch = (update: (entry: ChatEntry) => ChatEntry) =>
@@ -573,18 +599,35 @@ export default function App() {
             </div>
 
             <div className="chart__bar chart__bar--time">
-              {schedule && totalDays > 0 && (
-                <TimeBrush
-                  schedule={schedule}
-                  totalDays={totalDays}
-                  from={windowFrom}
-                  to={windowTo}
-                  onChange={setWindow}
-                />
+              {narrow ? (
+                <div className="frox-tabs chart__steps" role="group" aria-label="Масштаб таймлайна">
+                  {MOBILE_STEPS.map((step) => (
+                    <button
+                      key={step.key}
+                      className={`frox-tab${prefs.mobileStep === step.key ? " frox-tab-active" : ""}`}
+                      aria-pressed={prefs.mobileStep === step.key}
+                      onClick={() => setPrefs((current) => ({ ...current, mobileStep: step.key }))}
+                    >
+                      {step.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {schedule && totalDays > 0 && (
+                    <TimeBrush
+                      schedule={schedule}
+                      totalDays={totalDays}
+                      from={windowFrom}
+                      to={windowTo}
+                      onChange={setWindow}
+                    />
+                  )}
+                  <span className="chart__step" title="Шаг таймлайна подбирается под масштаб">
+                    {STEP_LABELS[viewMode] ?? ""}
+                  </span>
+                </>
               )}
-              <span className="chart__step" title="Шаг таймлайна подбирается под масштаб">
-                {STEP_LABELS[viewMode] ?? ""}
-              </span>
             </div>
           </div>
 
@@ -650,6 +693,8 @@ export default function App() {
           model={prefs.model}
           mentions={mentions}
           loadingHistory={loadingHistory}
+          collapsed={chatCollapsed}
+          onToggle={() => setChatCollapsed((value) => !value)}
           onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
           onSend={sendMessage}
           onStop={() => abort.current?.abort()}
