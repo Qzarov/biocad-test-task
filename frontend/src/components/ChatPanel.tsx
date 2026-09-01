@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatEntry, Health, ToolTrace } from "../types";
+import type { ChatEntry, Health, ModelInfo, ToolTrace } from "../types";
 
 const SUGGESTIONS = [
   "Перенеси клиническое исследование на 3 недели позже и покажи, что поехало",
@@ -26,12 +26,25 @@ interface Props {
   entries: ChatEntry[];
   streaming: boolean;
   health: Health | null;
+  models: ModelInfo[];
+  model: string | null;
+  onModelChange: (model: string) => void;
   onSend: (message: string) => void;
   onStop: () => void;
   onClear: () => void;
 }
 
-export function ChatPanel({ entries, streaming, health, onSend, onStop, onClear }: Props) {
+export function ChatPanel({
+  entries,
+  streaming,
+  health,
+  models,
+  model,
+  onModelChange,
+  onSend,
+  onStop,
+  onClear,
+}: Props) {
   const [draft, setDraft] = useState("");
   const log = useRef<HTMLDivElement>(null);
 
@@ -49,19 +62,39 @@ export function ChatPanel({ entries, streaming, health, onSend, onStop, onClear 
   return (
     <section className="chat" aria-label="Чат с агентом-планировщиком">
       <header className="chat__head">
-        <div>
+        <div className="chat__head-row">
           <div className="chat__title">Агент плана</div>
+          <button
+            className="frox-btn frox-btn-outline frox-btn-sm"
+            onClick={onClear}
+            disabled={streaming}
+          >
+            Очистить
+          </button>
+        </div>
+
+        {models.length > 0 ? (
+          <label className="chat__model-picker">
+            <span className="chat__model-label">Модель</span>
+            <select
+              className="frox-select"
+              value={model ?? ""}
+              disabled={streaming}
+              onChange={(event) => onModelChange(event.target.value)}
+              title="Модель меняется на следующий запрос"
+            >
+              {models.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label} · {option.vendor}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
           <div className="chat__model">
             {health?.llm_configured ? health.model : "модель не настроена"}
           </div>
-        </div>
-        <button
-          className="frox-btn frox-btn-outline frox-btn-sm"
-          onClick={onClear}
-          disabled={streaming}
-        >
-          Очистить
-        </button>
+        )}
       </header>
 
       {health && !health.llm_configured && (

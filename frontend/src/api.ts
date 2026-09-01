@@ -1,4 +1,4 @@
-import type { ApiFailure, ChatEvent, Health, PlanPayload } from "./types";
+import type { ApiFailure, ChatEvent, Health, ModelsResponse, PlanPayload } from "./types";
 
 const BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/$/, "");
 const SESSION_KEY = "gantt-agent-session";
@@ -49,6 +49,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   health: () => request<Health>("/health"),
+  models: () => request<ModelsResponse>("/models"),
   plan: () => request<PlanPayload>("/plan"),
   reset: () => request<PlanPayload>("/plan/reset", { method: "POST" }),
   undo: () => request<PlanPayload>("/plan/undo", { method: "POST" }),
@@ -96,12 +97,13 @@ export const api = {
 export async function streamChat(
   message: string,
   onEvent: (event: ChatEvent) => void,
-  signal?: AbortSignal,
+  options: { signal?: AbortSignal; model?: string } = {},
 ): Promise<void> {
+  const { signal, model } = options;
   const response = await fetch(`${BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Session-Id": sessionId() },
-    body: JSON.stringify({ message, session_id: sessionId() }),
+    body: JSON.stringify({ message, session_id: sessionId(), model }),
     signal,
   });
   if (!response.ok) await unwrap(response);

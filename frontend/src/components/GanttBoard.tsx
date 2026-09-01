@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Gantt, ViewMode, type Task as GanttTask } from "gantt-task-react";
 import "gantt-task-react/dist/index.css";
-import type { ScheduledTask, Schedule } from "../types";
-import { formatDate } from "../format";
+import type { ColumnKey, ScheduledTask, Schedule } from "../types";
+import { formatDate, formatDateNumeric } from "../format";
+import { OPTIONAL_COLUMNS, columnsWidth, gridTemplate } from "./ColumnPicker";
 
-// Frox palette (tokens live in styles/frox-tokens.css; the library needs plain
-// colour strings, so the four semantic values are mirrored here).
 const COLORS = {
   critical: { bar: "#3cb043", progress: "#228B22" },
   normal: { bar: "#5b6172", progress: "#464b59" },
@@ -13,26 +12,37 @@ const COLORS = {
   changed: { bar: "#50d1b2", progress: "#2fa78a" },
 };
 
-const LIST_WIDTH = "430px";
+// Высота календаря библиотеки и место под горизонтальный ползунок: без запаса
+// ползунок оказывается за границей карточки и мышкой до него не добраться.
+const HEADER_HEIGHT = 44;
+const SCROLLBAR_SPACE = 26;
 
 interface Props {
   schedule: Schedule;
   viewMode: ViewMode;
+  columnWidth: number;
+  columns: ColumnKey[];
   changed: string[];
   selectedId: string | null;
+  filtered: boolean;
   onSelect: (taskId: string) => void;
   onOpen: (taskId: string) => void;
   onDrag: (taskId: string, start: string, durationDays: number) => void;
+  onResetFilters: () => void;
 }
 
 export function GanttBoard({
   schedule,
   viewMode,
+  columnWidth,
+  columns,
   changed,
   selectedId,
+  filtered,
   onSelect,
   onOpen,
   onDrag,
+  onResetFilters,
 }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(520);
@@ -54,6 +64,9 @@ export function GanttBoard({
   }, [schedule]);
 
   const changedSet = useMemo(() => new Set(changed), [changed]);
+  const listWidth = `${columnsWidth(columns)}px`;
+  const template = gridTemplate(columns);
+  const visibleColumns = OPTIONAL_COLUMNS.filter((column) => columns.includes(column.key));
 
   const tasks: GanttTask[] = useMemo(
     () =>
@@ -90,21 +103,51 @@ export function GanttBoard({
       <div className="chart__frame">
         <div className="chart__empty">
           <div>
-            <strong>В плане нет задач</strong>
-            <span className="hint">
-              Загрузите Excel или попросите агента добавить первую задачу.
-            </span>
+            <strong>{filtered ? "Под фильтр ничего не подошло" : "В плане нет задач"}</strong>
+            {filtered ? (
+              <button className="frox-btn frox-btn-outline frox-btn-sm" onClick={onResetFilters}>
+                Сбросить фильтр
+              </button>
+            ) : (
+              <span className="hint">
+                Загрузите Excel или попросите агента добавить первую задачу.
+              </span>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
+  const cellValue = (task: ScheduledTask | undefined, key: ColumnKey) => {
+    if (!task) return "—";
+    switch (key) {
+      case "assignee":
+        return task.assignee || "—";
+      case "duration":
+        return task.duration_days;
+      case "start":
+        return formatDateNumeric(task.start);
+      case "end":
+        return formatDateNumeric(task.end);
+      case "slack":
+        return task.is_critical ? "0" : task.slack_days;
+      case "progress":
+        return `${task.progress}%`;
+    }
+  };
+
   const TaskListHeader = () => (
-    <div className="gantt-head" style={{ width: LIST_WIDTH, height: 44 }}>
-      <span className="label">Задача</span>
-      <span className="label">Исполнитель</span>
-      <span className="label">Дн.</span>
+    <div
+      className="gantt-head"
+      style={{ width: listWidth, height: HEADER_HEIGHT, gridTemplateColumns: template }}
+    >
+      <span>Задача</span>
+      {visibleColumns.map((column) => (
+        <span key={column.key} className="gantt-head__cell">
+          {column.label}
+        </span>
+      ))}
     </div>
   );
 
@@ -122,7 +165,7 @@ export function GanttBoard({
     setSelectedTask: (taskId: string) => void;
     onExpanderClick: (task: GanttTask) => void;
   }) => (
-    <div style={{ width: LIST_WIDTH }}>
+    <div style={{ width: listWidth }}>
       {rows.map((row) => {
         const task = byId.get(row.id);
         const classes = ["gantt-row"];
@@ -132,7 +175,7 @@ export function GanttBoard({
           <div
             key={row.id}
             className={classes.join(" ")}
-            style={{ height: rowHeight }}
+            style={{ height: rowHeight, gridTemplateColumns: template }}
             role="button"
             tabIndex={0}
             title={`${row.name} — открыть детали`}
@@ -158,8 +201,14 @@ export function GanttBoard({
               />
               <span className="gantt-row__title">{row.name}</span>
             </span>
-            <span className="gantt-row__assignee">{task?.assignee || "—"}</span>
-            <span className="gantt-row__days num">{task?.duration_days ?? "—"}</span>
+            {visibleColumns.map((column) => (
+              <span
+                key={column.key}
+                className={`gantt-row__cell${column.key === "assignee" ? "" : " num"}`}
+              >
+                {cellValue(task, column.key)}
+              </span>
+            ))}
           </div>
         );
       })}
@@ -202,11 +251,11 @@ export function GanttBoard({
         viewDate={new Date(`${schedule.project_start}T00:00:00`)}
         preStepsCount={1}
         locale="ru-RU"
-        listCellWidth={LIST_WIDTH}
-        columnWidth={viewMode === ViewMode.Month ? 120 : viewMode === ViewMode.Week ? 74 : 42}
+        listCellWidth={listWidth}
+        columnWidth={columnWidth}
         rowHeight={40}
-        headerHeight={44}
-        barCornerRadius={2}
+        headerHeight={HEADER_HEIGHT}
+        barCornerRadius={3}
         barFill={62}
         handleWidth={7}
         arrowColor="#5b5f70"
@@ -214,7 +263,7 @@ export function GanttBoard({
         todayColor="rgba(34, 139, 34, 0.10)"
         fontFamily='"Noto Sans", system-ui, sans-serif'
         fontSize="12.5px"
-        ganttHeight={Math.max(240, height - 44)}
+        ganttHeight={Math.max(200, height - HEADER_HEIGHT - SCROLLBAR_SPACE)}
         TaskListHeader={TaskListHeader}
         TaskListTable={TaskListTable}
         TooltipContent={TooltipContent}

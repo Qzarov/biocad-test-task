@@ -2,17 +2,41 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ViewMode } from "gantt-task-react";
 import { ApiError, api, sessionId, streamChat } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
+import { ColumnPicker } from "./components/ColumnPicker";
 import { GanttBoard } from "./components/GanttBoard";
 import { ProjectSpine } from "./components/ProjectSpine";
+import { EMPTY_FILTERS, TableFilter, applyFilters, isFilterActive } from "./components/TableFilter";
 import { TaskModal } from "./components/TaskModal";
 import { daysBetween, formatDate, plural } from "./format";
-import type { ChatEntry, Health, PlanPayload } from "./types";
+import { loadPrefs, savePrefs } from "./prefs";
+import type {
+  ChatEntry,
+  ColumnKey,
+  Health,
+  ModelInfo,
+  PlanPayload,
+  TaskFilters,
+} from "./types";
 
 const VIEW_MODES: { mode: ViewMode; label: string }[] = [
   { mode: ViewMode.Day, label: "День" },
   { mode: ViewMode.Week, label: "Неделя" },
   { mode: ViewMode.Month, label: "Месяц" },
 ];
+
+/** Ползунок масштаба меняет ширину колонки таймлайна внутри выбранного режима:
+ *  в днях разумный диапазон один, в месяцах — другой. Само положение ползунка
+ *  общее, поэтому при переключении режима «плотность» сохраняется. */
+const ZOOM_RANGES: Partial<Record<ViewMode, [number, number]>> = {
+  [ViewMode.Day]: [22, 84],
+  [ViewMode.Week]: [44, 156],
+  [ViewMode.Month]: [72, 288],
+};
+
+function columnWidthFor(mode: ViewMode, zoom: number): number {
+  const [min, max] = ZOOM_RANGES[mode] ?? [40, 140];
+  return Math.round(min + ((max - min) * Math.min(100, Math.max(0, zoom))) / 100);
+}
 
 interface Notice {
   kind: "info" | "error";
@@ -30,6 +54,9 @@ export default function App() {
   const [changed, setChanged] = useState<string[]>([]);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [prefs, setPrefs] = useState(loadPrefs);
+  const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS);
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -72,8 +99,23 @@ export default function App() {
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null));
+    api
+      .models()
+      .then((response) => {
+        setModels(response.models);
+        setPrefs((current) =>
+          current.model && response.models.some((model) => model.id === current.model)
+            ? current
+            : { ...current, model: response.default },
+        );
+      })
+      .catch(() => setModels([]));
     run(() => api.plan(), { highlight: false });
   }, [run]);
+
+  useEffect(() => {
+    savePrefs(prefs);
+  }, [prefs]);
 
   const plan = payload?.plan;
   const schedule = payload?.schedule;
@@ -90,6 +132,23 @@ export default function App() {
     () => plan?.tasks.filter((task) => task.predecessors.includes(openTaskId ?? "")) ?? [],
     [plan, openTaskId],
   );
+
+  const visibleTasks = useMemo(
+    () => applyFilters(schedule?.tasks ?? [], filters),
+    [schedule, filters],
+  );
+  const visibleSchedule = useMemo(
+    () => (schedule ? { ...schedule, tasks: visibleTasks } : null),
+    [schedule, visibleTasks],
+  );
+  const assigneeOptions = useMemo(
+    () =>
+      Array.from(new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean))).sort(
+        (a, b) => a.localeCompare(b, "ru"),
+      ),
+    [plan],
+  );
+  const columnWidth = columnWidthFor(viewMode, prefs.zoom);
 
   const criticalCount = schedule?.tasks.filter((task) => task.is_critical).length ?? 0;
   const assignees = new Set((plan?.tasks ?? []).map((task) => task.assignee).filter(Boolean));
@@ -167,7 +226,7 @@ export default function App() {
                 break;
             }
           },
-          abort.current.signal,
+          { signal: abort.current.signal, model: prefs.model ?? undefined },
         );
         // resync history so undo reflects what the agent did
         const fresh = await api.plan();
@@ -184,7 +243,7 @@ export default function App() {
         abort.current = null;
       }
     },
-    [fail, highlight],
+    [fail, highlight, prefs.model],
   );
 
   return (
@@ -281,48 +340,89 @@ export default function App() {
 
       <div className="workspace">
         <section className="chart">
-          <div className="chart__head">
-            <div>
-              {notice ? (
-                <div className={`notice${notice.kind === "error" ? " notice--error" : ""}`} style={{ margin: 0 }}>
-                  <strong>{notice.message}</strong>
-                  {notice.details && notice.details.length > 0 && (
-                    <ul>
-                      {notice.details.slice(0, 6).map((detail) => (
-                        <li key={detail}>{detail}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : (
-                <span className="hint">
-                  Клик по строке — выделить, двойной клик — детали. Полоску можно тянуть по таймлайну.
-                </span>
-              )}
-            </div>
-            <div className="frox-tabs" role="group" aria-label="Масштаб таймлайна">
-              {VIEW_MODES.map((option) => (
-                <button
-                  key={option.label}
-                  className={`frox-tab${viewMode === option.mode ? " frox-tab-active" : ""}`}
-                  aria-pressed={viewMode === option.mode}
-                  onClick={() => {
-                    setViewMode(option.mode);
-                    setViewModeTouched(true);
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
+          <div className="chart__toolbar">
+            <TableFilter
+              filters={filters}
+              assignees={assigneeOptions}
+              shown={visibleTasks.length}
+              total={schedule?.tasks.length ?? 0}
+              onChange={setFilters}
+            />
+
+            <div className="chart__view">
+              <div className="frox-tabs" role="group" aria-label="Шаг таймлайна">
+                {VIEW_MODES.map((option) => (
+                  <button
+                    key={option.label}
+                    className={`frox-tab${viewMode === option.mode ? " frox-tab-active" : ""}`}
+                    aria-pressed={viewMode === option.mode}
+                    onClick={() => {
+                      setViewMode(option.mode);
+                      setViewModeTouched(true);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="zoom" title="Масштаб таймлайна">
+                <span className="zoom__label">Масштаб</span>
+                <input
+                  className="zoom__slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={prefs.zoom}
+                  onChange={(event) =>
+                    setPrefs((current) => ({ ...current, zoom: Number(event.target.value) }))
+                  }
+                  aria-label="Масштаб таймлайна"
+                />
+                <span className="zoom__value num">{columnWidth}px</span>
+              </label>
+
+              <ColumnPicker
+                columns={prefs.columns}
+                onChange={(columns: ColumnKey[]) =>
+                  setPrefs((current) => ({ ...current, columns }))
+                }
+              />
             </div>
           </div>
 
-          {schedule ? (
+          {notice ? (
+            <div
+              className={`notice${notice.kind === "error" ? " notice--error" : ""}`}
+              style={{ margin: "0 0 12px" }}
+            >
+              <strong>{notice.message}</strong>
+              {notice.details && notice.details.length > 0 && (
+                <ul>
+                  {notice.details.slice(0, 6).map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <span className="hint chart__tip">
+              Клик по строке — выделить, двойной клик — детали. Полоску можно тянуть по таймлайну,
+              снизу диаграммы — ползунок прокрутки.
+            </span>
+          )}
+
+          {visibleSchedule ? (
             <GanttBoard
-              schedule={schedule}
+              schedule={visibleSchedule}
               viewMode={viewMode}
+              columnWidth={columnWidth}
+              columns={prefs.columns}
               changed={changed}
               selectedId={selectedId}
+              filtered={isFilterActive(filters)}
+              onResetFilters={() => setFilters(EMPTY_FILTERS)}
               onSelect={setSelectedId}
               onOpen={(id) => {
                 setSelectedId(id);
@@ -351,6 +451,9 @@ export default function App() {
           entries={entries}
           streaming={streaming}
           health={health}
+          models={models}
+          model={prefs.model}
+          onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
           onSend={sendMessage}
           onStop={() => abort.current?.abort()}
           onClear={() => {

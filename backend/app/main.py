@@ -109,6 +109,7 @@ class TaskUpdate(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    model: Optional[str] = Field(None, description="Модель из списка /api/models")
 
 
 # --- plan state ------------------------------------------------------------
@@ -121,6 +122,25 @@ def health() -> dict[str, Any]:
         "llm_configured": settings.llm_configured,
         "model": settings.llm_model if settings.llm_configured else None,
         "base_url": settings.llm_base_url,
+    }
+
+
+@app.get("/api/models")
+def list_models() -> dict[str, Any]:
+    """Модели, доступные в выпадающем списке чата.
+
+    Список задаётся переменной LLM_MODELS, поэтому набор меняется без правок кода.
+    """
+    return {
+        "default": settings.llm_model,
+        "models": [
+            {
+                "id": model,
+                "label": model.split("/")[-1],
+                "vendor": model.split("/")[0] if "/" in model else "",
+            }
+            for model in settings.available_models
+        ],
     }
 
 
@@ -334,10 +354,14 @@ async def chat(
     message = (body.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail={"message": "Пустое сообщение"})
+    try:
+        model = settings.resolve_model(body.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)})
 
     async def event_stream():
         try:
-            async for event in run_turn(store, sid, message):
+            async for event in run_turn(store, sid, message, model=model):
                 if await request.is_disconnected():
                     break
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

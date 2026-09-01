@@ -81,6 +81,27 @@ export interface ChatEntry {
   pending?: boolean;
 }
 
+export interface ModelInfo {
+  id: string;
+  label: string;
+  vendor: string;
+}
+
+export interface ModelsResponse {
+  default: string;
+  models: ModelInfo[];
+}
+
+/** Колонки списка задач, которые можно скрывать. «Задача» есть всегда. */
+export type ColumnKey = "assignee" | "duration" | "start" | "end" | "slack" | "progress";
+
+export interface TaskFilters {
+  query: string;
+  assignee: string;
+  criticalOnly: boolean;
+  pinnedOnly: boolean;
+}
+
 export interface Health {
   ok: boolean;
   llm_configured: boolean;

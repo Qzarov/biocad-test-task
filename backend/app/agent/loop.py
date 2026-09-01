@@ -114,9 +114,14 @@ async def run_turn(
     session_id: str,
     user_message: str,
     llm: Optional[LLM] = None,
+    model: Optional[str] = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Drive one chat turn, yielding SSE-ready events."""
-    llm = llm or OpenAICompatibleLLM()
+    """Drive one chat turn, yielding SSE-ready events.
+
+    `model` переопределяет модель на один ход (выпадающий список в чате);
+    валидация по белому списку — на стороне маршрута.
+    """
+    llm = llm or OpenAICompatibleLLM(model=model)
     plan_before = store.ensure_session(session_id, seed_plan())
 
     messages: list[dict[str, Any]] = [
@@ -197,7 +202,11 @@ async def run_turn(
     plan_after = store.get_plan(session_id) or plan_before
     if tool_calls_made:
         yield plan_event(plan_before, plan_after)
-    yield {"type": "done", "tool_calls": tool_calls_made}
+    yield {
+        "type": "done",
+        "tool_calls": tool_calls_made,
+        "model": model or settings.llm_model,
+    }
 
 
 def _find_exception(exc: BaseException, wanted: type) -> Optional[BaseException]:

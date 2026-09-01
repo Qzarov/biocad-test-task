@@ -6,6 +6,15 @@ export function formatDate(iso: string | null | undefined): string {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Компактная дата для ячеек таблицы: «01.09.2026». В модалке и тултипе
+ *  остаётся длинный формат — там есть место и читается он приятнее. */
+export function formatDateNumeric(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [year, month, day] = iso.split("-");
+  if (!year || !month || !day) return iso;
+  return `${day}.${month}.${year}`;
+}
+
 export function plural(count: number, one: string, few: string, many: string): string {
   const mod10 = count % 10;
   const mod100 = count % 100;

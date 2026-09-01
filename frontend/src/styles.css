@@ -265,12 +265,160 @@ a.frox-btn {
   padding: 16px 22px 20px;
 }
 
-.chart__head {
+.chart__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.chart__view {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.chart__tip {
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* --- фильтр списка задач -------------------------------------------------- */
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.filters__query {
+  width: 280px;
+  padding: 7px 12px;
+}
+
+.filters__assignee {
+  width: 190px;
+  padding: 7px 32px 7px 12px;
+}
+
+.filters__toggle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.filters__count {
+  font-family: var(--font-num);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- масштаб -------------------------------------------------------------- */
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.zoom__label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.zoom__value {
+  min-width: 44px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.zoom__slider {
+  width: 132px;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--border-input);
+  border-radius: 999px;
+  cursor: ew-resize;
+}
+
+.zoom__slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent-hover);
+  border: 2px solid var(--bg-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.zoom__slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--accent-hover);
+}
+
+/* --- выпадающий список колонок ------------------------------------------- */
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown__count {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 11px;
+}
+
+.dropdown__menu {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 212px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.dropdown__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dropdown__item {
+  padding: 5px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.dropdown__item:hover {
+  background: var(--bg-hover);
+}
+
+.dropdown__item--locked {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .chart__frame {
@@ -342,6 +490,39 @@ a.frox-btn {
   fill: var(--accent-soft);
 }
 
+/* Ползунки самой библиотеки. Целимся по префиксу `_` (все её классы — CSS-модули),
+   чтобы не зависеть от конкретных хешей; отдельное правило для горизонтального
+   контейнера задаёт ему высоту и отделяет линией от сетки. */
+.chart__frame div[class^="_"] {
+  scrollbar-width: auto;
+  scrollbar-color: var(--border-input) transparent;
+}
+
+.chart__frame div[class^="_"]::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.chart__frame div[class^="_"]::-webkit-scrollbar-thumb {
+  min-width: 56px;
+  min-height: 56px;
+  background: var(--border-input);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.chart__frame div[class^="_"]::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+  background-clip: padding-box;
+}
+
+.chart__frame ._2k9Ys {
+  height: 22px;
+  background: var(--bg-surface-alt);
+  border-top: 1px solid var(--border) !important;
+}
+
 /* Библиотека дублирует название задачи подписью у полоски; слева уже есть
    колонка с именами, а по наведению — тултип, поэтому подпись только шумит. */
 .chart__frame .bar text {
@@ -361,8 +542,16 @@ a.frox-btn {
   color: var(--text-secondary);
 }
 
-.gantt-head span:last-child {
-  text-align: right;
+.gantt-head__cell,
+.gantt-row__cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-row__cell {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .gantt-row {
@@ -419,19 +608,9 @@ a.frox-btn {
   background: var(--plan-pinned);
 }
 
-.gantt-row__assignee {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.gantt-row__days {
+.gantt-row__cell.num {
   text-align: right;
   font-family: var(--font-num);
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 .gantt-tooltip {
@@ -484,6 +663,36 @@ a.frox-btn {
   gap: 10px;
   padding: 14px 18px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.chat__head {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.chat__head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat__model-picker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.chat__model-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.chat__model-picker .frox-select {
+  padding: 7px 32px 7px 12px;
+  font-size: 13px;
 }
 
 .chat__title {

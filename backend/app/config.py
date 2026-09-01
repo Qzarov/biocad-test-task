@@ -21,6 +21,18 @@ class Settings:
     llm_base_url: str = os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
     llm_api_key: str = os.environ.get("OPENROUTER_API_KEY", os.environ.get("LLM_API_KEY", ""))
     llm_model: str = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-5")
+    # Модели, которые разрешено выбирать в интерфейсе. Все из списка ниже
+    # проверены на поддержку tool-calling — без него агент бесполезен.
+    llm_models: list[str] = field(
+        default_factory=lambda: _split(
+            os.environ.get(
+                "LLM_MODELS",
+                "anthropic/claude-sonnet-5,anthropic/claude-opus-5,"
+                "openai/gpt-5.6-terra,google/gemini-3.7-flash,"
+                "deepseek/deepseek-chat-v3.1,qwen/qwen3-max",
+            )
+        )
+    )
     llm_timeout_seconds: float = float(os.environ.get("LLM_TIMEOUT_SECONDS", "120"))
     max_tool_steps: int = int(os.environ.get("MAX_TOOL_STEPS", "10"))
     history_limit: int = int(os.environ.get("HISTORY_LIMIT", "40"))
@@ -39,6 +51,26 @@ class Settings:
     @property
     def llm_configured(self) -> bool:
         return bool(self.llm_api_key)
+
+    @property
+    def available_models(self) -> list[str]:
+        """Список для интерфейса: модель по умолчанию всегда первая и всегда есть."""
+        models = [self.llm_model] + [m for m in self.llm_models if m != self.llm_model]
+        return models
+
+    def resolve_model(self, requested: str | None) -> str:
+        """Проверить выбранную модель по белому списку.
+
+        Без проверки поле model из браузера стало бы способом гонять любые
+        (в том числе дорогие) модели за счёт нашего ключа.
+        """
+        if not requested:
+            return self.llm_model
+        if requested not in self.available_models:
+            raise ValueError(
+                f"Модель «{requested}» не разрешена. Доступны: {', '.join(self.available_models)}"
+            )
+        return requested
 
 
 settings = Settings()

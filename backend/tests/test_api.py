@@ -278,3 +278,46 @@ def test_exported_file_round_trips_its_title_and_start(sid):
     assert body["plan"]["title"] == "Выведение биоаналога на рынок"
     assert body["plan"]["project_start"] == "2026-09-01"
     assert len(body["plan"]["tasks"]) == 17
+
+
+def test_models_endpoint_lists_the_default_first():
+    body = client.get("/api/models").json()
+    assert body["models"][0]["id"] == body["default"]
+    ids = [m["id"] for m in body["models"]]
+    assert len(ids) == len(set(ids)), "модель не должна повторяться в списке"
+    assert all(m["label"] and "/" not in m["label"] for m in body["models"])
+
+
+def test_chat_rejects_a_model_outside_the_whitelist(sid):
+    response = client.post(
+        "/api/chat",
+        json={"message": "привет", "session_id": sid, "model": "evil/expensive-model"},
+    )
+    assert response.status_code == 400
+    assert "не разрешена" in response.json()["detail"]["message"]
+
+
+def test_chat_passes_the_selected_model_to_the_llm(sid, monkeypatch):
+    from app.config import settings
+
+    picked = settings.available_models[-1]
+    captured: dict[str, object] = {}
+
+    class RecordingLLM:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+        async def complete(self, messages, tools):
+            return {"role": "assistant", "content": "готово"}
+
+    monkeypatch.setattr(agent_loop, "OpenAICompatibleLLM", RecordingLLM)
+    agent_loop.memory.clear(sid)
+
+    with client.stream(
+        "POST", "/api/chat", json={"message": "привет", "session_id": sid, "model": picked}
+    ) as response:
+        response.read()
+        events = sse_events(response)
+
+    assert captured.get("model") == picked
+    assert events[-1]["type"] == "done" and events[-1]["model"] == picked
