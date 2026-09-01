@@ -344,6 +344,37 @@ a.frox-btn {
   padding-right: 4px;
 }
 
+/* Ряд переключения вида (только телефон): виды слева, вход в агента справа. */
+.chart__bar--views {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chart__step-select {
+  flex: none;
+  width: auto;
+  padding: 6px 26px 6px 9px;
+  font-size: 12px;
+}
+
+.chat__open {
+  flex: none;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Пока агент думает, кнопка мигает: панель закрыта, и это единственный признак,
+   что запрос ещё в работе. */
+.chat__open--busy {
+  animation: chat-busy 1.1s ease-in-out infinite;
+}
+
+@keyframes chat-busy {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .chart__bar--time {
   flex: 1;
   min-width: 0;
@@ -1198,6 +1229,35 @@ body.is-dragging-row * {
   }
 }
 
+/* На телефоне агент — не колонка сбоку, а панель, выезжающая поверх плана:
+   план и чат по очереди занимают весь экран, полоса внизу больше не нужна. */
+.chat--sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  animation: chat-slide 0.2s ease-out;
+}
+
+@keyframes chat-slide {
+  from {
+    transform: translateX(14%);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.chat--sheet .chat__head {
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.chat--sheet .chat__composer {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
 .chat--expanded .chat__log,
 .chat--expanded .chat__composer {
   max-width: 900px;
@@ -1959,20 +2019,17 @@ body.is-dragging-row * {
     display: none;
   }
 
-  .chart__bar--list > .dropdown {
+  /* Счётчик задач на телефоне дублирует «17 задач» в шапке, а место в ряду
+     нужнее поиску и масштабу. */
+  .filters__count {
     display: none;
   }
 
-  /* Чат сворачивается в одну строку, и раскладка перестаёт делить экран пополам. */
+  /* Весь экран отдан плану: агент выезжает поверх по кнопке «Агент». */
   .workspace {
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
   }
 
-  .workspace:has(.chat:not(.chat--collapsed)) {
-    grid-template-rows: minmax(240px, 1fr) minmax(280px, 52vh);
-  }
-
-  .chart__steps,
   .chart__views {
     flex: none;
   }

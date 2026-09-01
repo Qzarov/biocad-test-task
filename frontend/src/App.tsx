@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ViewMode } from "gantt-task-react";
 import {
+  Bot,
   Download,
   FileDown,
   FileSpreadsheet,
@@ -584,11 +585,8 @@ export default function App() {
       <div className="workspace">
         <section className="chart">
           <div className="chart__bars">
-            <div
-              className="chart__bar chart__bar--list"
-              style={narrow ? undefined : { width: listWidth }}
-            >
-              {narrow && (
+            {narrow && (
+              <div className="chart__bar chart__bar--views">
                 <div className="frox-tabs chart__views" role="group" aria-label="Вид плана">
                   <button
                     className={`frox-tab${prefs.mobileView === "chart" ? " frox-tab-active" : ""}`}
@@ -605,7 +603,22 @@ export default function App() {
                     Список
                   </button>
                 </div>
-              )}
+
+                <button
+                  className={`frox-btn frox-btn-brand frox-btn-sm chat__open${streaming ? " chat__open--busy" : ""}`}
+                  onClick={() => setChatExpanded(true)}
+                  title="Открыть агента плана"
+                >
+                  <Bot size={15} />
+                  Агент
+                </button>
+              </div>
+            )}
+
+            <div
+              className="chart__bar chart__bar--list"
+              style={narrow ? undefined : { width: listWidth }}
+            >
               <TableFilter
                 filters={filters}
                 assignees={assigneeOptions}
@@ -613,48 +626,55 @@ export default function App() {
                 total={schedule?.tasks.length ?? 0}
                 onChange={setFilters}
               />
-              <ColumnPicker
-                columns={prefs.columns}
-                hasCustomWidths={Object.keys(prefs.columnWidths).length > 0}
-                onChange={(columns: ColumnKey[]) =>
-                  setPrefs((current) => ({ ...current, columns }))
-                }
-                onResetWidths={() => setPrefs((current) => ({ ...current, columnWidths: {} }))}
-              />
-            </div>
 
-            <div className="chart__bar chart__bar--time">
-              {narrow ? (
-                <div className="frox-tabs chart__steps" role="group" aria-label="Масштаб таймлайна">
-                  {prefs.mobileView === "chart" &&
-                    MOBILE_STEPS.map((step) => (
-                    <button
-                      key={step.key}
-                      className={`frox-tab${prefs.mobileStep === step.key ? " frox-tab-active" : ""}`}
-                      aria-pressed={prefs.mobileStep === step.key}
-                      onClick={() => setPrefs((current) => ({ ...current, mobileStep: step.key }))}
-                    >
-                        {step.label}
-                      </button>
-                    ))}
-                </div>
-              ) : (
-                <>
-                  {schedule && totalDays > 0 && (
-                    <TimeBrush
-                      schedule={schedule}
-                      totalDays={totalDays}
-                      from={windowFrom}
-                      to={windowTo}
-                      onChange={setWindow}
-                    />
-                  )}
-                  <span className="chart__step" title="Шаг таймлайна подбирается под масштаб">
-                    {STEP_LABELS[viewMode] ?? ""}
-                  </span>
-                </>
+              {narrow && prefs.mobileView === "chart" && (
+                <select
+                  className="frox-select chart__step-select"
+                  value={prefs.mobileStep}
+                  onChange={(event) =>
+                    setPrefs((current) => ({
+                      ...current,
+                      mobileStep: event.target.value as typeof current.mobileStep,
+                    }))
+                  }
+                  aria-label="Масштаб таймлайна"
+                >
+                  {MOBILE_STEPS.map((step) => (
+                    <option key={step.key} value={step.key}>
+                      {step.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {!narrow && (
+                <ColumnPicker
+                  columns={prefs.columns}
+                  hasCustomWidths={Object.keys(prefs.columnWidths).length > 0}
+                  onChange={(columns: ColumnKey[]) =>
+                    setPrefs((current) => ({ ...current, columns }))
+                  }
+                  onResetWidths={() => setPrefs((current) => ({ ...current, columnWidths: {} }))}
+                />
               )}
             </div>
+
+            {!narrow && (
+              <div className="chart__bar chart__bar--time">
+                {schedule && totalDays > 0 && (
+                  <TimeBrush
+                    schedule={schedule}
+                    totalDays={totalDays}
+                    from={windowFrom}
+                    to={windowTo}
+                    onChange={setWindow}
+                  />
+                )}
+                <span className="chart__step" title="Шаг таймлайна подбирается под масштаб">
+                  {STEP_LABELS[viewMode] ?? ""}
+                </span>
+              </div>
+            )}
           </div>
 
           {narrow && prefs.mobileView === "list" ? (
@@ -724,25 +744,32 @@ export default function App() {
           )}
         </section>
 
-        <ChatPanel
-          entries={entries}
-          streaming={streaming}
-          health={health}
-          models={models}
-          model={prefs.model}
-          mentions={mentions}
-          loadingHistory={loadingHistory}
-          collapsed={chatCollapsed && !chatExpanded}
-          expanded={chatExpanded}
-          onToggle={() => setChatCollapsed((value) => !value)}
-          onToggleExpand={() => {
-            setChatExpanded((value) => !value);
-            setChatCollapsed(false);
-          }}
-          onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
-          onSend={sendMessage}
-          onStop={() => abort.current?.abort()}
-        />
+        {(!narrow || chatExpanded) && (
+          <ChatPanel
+            entries={entries}
+            streaming={streaming}
+            health={health}
+            models={models}
+            model={prefs.model}
+            mentions={mentions}
+            loadingHistory={loadingHistory}
+            collapsed={!narrow && chatCollapsed && !chatExpanded}
+            expanded={chatExpanded}
+            sheet={narrow}
+            onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
+            onToggle={() => setChatCollapsed((value) => !value)}
+            onToggleExpand={() => {
+              if (narrow) {
+                setChatExpanded(false);
+                return;
+              }
+              setChatExpanded((value) => !value);
+              setChatCollapsed(false);
+            }}
+            onSend={sendMessage}
+            onStop={() => abort.current?.abort()}
+          />
+        )}
       </div>
 
       <Toasts toasts={toasts} onDismiss={dismissToast} />

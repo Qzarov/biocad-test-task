@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatEntry, Health, Mention, ModelInfo, ToolTrace } from "../types";
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Send, Square } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Send, Square, X } from "lucide-react";
 import { Collapsible } from "./Collapsible";
 
 const SUGGESTIONS = [
@@ -38,6 +38,8 @@ interface Props {
   onModelChange: (model: string) => void;
   collapsed: boolean;
   expanded: boolean;
+  /** Мобильный режим: панель выезжает поверх плана и закрывается крестиком. */
+  sheet?: boolean;
   onToggle: () => void;
   onToggleExpand: () => void;
   onSend: (message: string) => void;
@@ -55,6 +57,7 @@ export function ChatPanel({
   onModelChange,
   collapsed,
   expanded,
+  sheet = false,
   onToggle,
   onToggleExpand,
   onSend,
@@ -69,6 +72,17 @@ export function ChatPanel({
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
   }, [entries, streaming]);
+
+  // Выехавшую поверх плана панель ждут закрытой по Escape, а на телефоне —
+  // системным «назад», который здесь тоже приходит как закрытие.
+  useEffect(() => {
+    if (!sheet) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onToggleExpand();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet, onToggleExpand]);
 
   const matches = useMemo(() => {
     if (mentionQuery === null) return [];
@@ -137,19 +151,25 @@ export function ChatPanel({
 
   return (
     <section
-      className={`chat${collapsed ? " chat--collapsed" : ""}${expanded ? " chat--expanded" : ""}`}
+      className={`chat${collapsed ? " chat--collapsed" : ""}${expanded ? " chat--expanded" : ""}${
+        sheet ? " chat--sheet" : ""
+      }`}
       aria-label="Чат с агентом-планировщиком"
     >
       <header className="chat__head">
-        <button
-          className="chat__toggle"
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-          title={collapsed ? "Развернуть чат" : "Свернуть чат, чтобы не мешал диаграмме"}
-        >
-          {collapsed ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        {sheet ? (
           <span className="chat__title">Агент плана</span>
-        </button>
+        ) : (
+          <button
+            className="chat__toggle"
+            onClick={onToggle}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Развернуть чат" : "Свернуть чат, чтобы не мешал диаграмме"}
+          >
+            {collapsed ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            <span className="chat__title">Агент плана</span>
+          </button>
+        )}
 
         <div className="chat__head-right">
           {models.length > 0 ? (
@@ -178,10 +198,10 @@ export function ChatPanel({
             className="icon-btn chat__expand"
             onClick={onToggleExpand}
             aria-pressed={expanded}
-            title={expanded ? "Свернуть агента к панели" : "Раскрыть агента на весь экран"}
-            aria-label={expanded ? "Свернуть агента" : "Раскрыть агента на весь экран"}
+            title={sheet ? "Закрыть агента" : expanded ? "Свернуть агента к панели" : "Раскрыть агента на весь экран"}
+            aria-label={sheet ? "Закрыть агента" : expanded ? "Свернуть агента" : "Раскрыть агента на весь экран"}
           >
-            {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {sheet ? <X size={17} /> : expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
         </div>
 
@@ -337,7 +357,11 @@ export function ChatPanel({
         </div>
 
         <span className="hint chat__hint">
-          {menuOpen ? "↑↓ — выбор, Enter — вставить" : "Ctrl/⌘ + Enter — отправить · @ — ссылка на задачу или человека"}
+          {menuOpen
+            ? "↑↓ — выбор, Enter — вставить"
+            : sheet
+              ? "@ — ссылка на задачу или человека"
+              : "Ctrl/⌘ + Enter — отправить · @ — ссылка на задачу или человека"}
         </span>
       </div>
     </section>
