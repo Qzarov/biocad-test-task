@@ -15,6 +15,7 @@
 - Демо сценария «загрузка Excel → правка через чат → экспорт»:
   [`docs/demo.mp4`](docs/demo.mp4) (полный, 60 с) и [`docs/demo.gif`](docs/demo.gif) (ускоренный)
 - Пример входного файла: [`samples/example_plan.xlsx`](samples/example_plan.xlsx)
+- Шаблон плана (он же демо-план): [`samples/plan_template.xlsx`](samples/plan_template.xlsx)
 - Что нужно до продакшена: [`docs/ROADMAP_TO_PRODUCTION.md`](docs/ROADMAP_TO_PRODUCTION.md)
 
 ---
@@ -114,7 +115,7 @@ cd /var/www/biocad-gantt && git pull && docker compose up -d --build
 | Загрузить свой план | «Загрузить Excel» |
 | Выгрузить план | «Скачать Excel» |
 | Отменить последнюю правку | «Откатить» (история снимков, в том числе после хода агента) |
-| Вернуть демо-план | «Демо-план» |
+| Начать со шаблона | «Скачать шаблон плана» — тот же план, что открывается по умолчанию; заполните и загрузите обратно |
 
 Что понимает агент (проверенные формулировки):
 
@@ -224,8 +225,9 @@ Cursor, Claude Code) и править тот же план оттуда:
 | GET | `/api/plan` | план + расписание + история |
 | POST | `/api/plan/import` | загрузка .xlsx (multipart) |
 | GET | `/api/plan/export` | выгрузка .xlsx |
+| GET | `/api/plan/template` | шаблон плана (демо-план) в .xlsx |
 | POST | `/api/plan/undo` | откат на один снимок |
-| POST | `/api/plan/reset` | вернуть демо-план |
+| POST | `/api/plan/reset` | вернуть демо-план (в интерфейсе не выведено) |
 | POST | `/api/plan/tasks` | добавить задачу |
 | PATCH | `/api/plan/tasks/{id}` | правка задачи, drag, фиксация даты |
 | POST | `/api/plan/tasks/{id}/reorder` | переставить строку до/после другой задачи |

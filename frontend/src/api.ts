@@ -68,6 +68,7 @@ export const api = {
   },
 
   exportUrl: () => `${BASE}/plan/export?session_id=${sessionId()}`,
+  templateUrl: () => `${BASE}/plan/template`,
 
   createTask: (body: {
     name: string;

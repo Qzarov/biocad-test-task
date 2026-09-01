@@ -378,16 +378,13 @@ export default function App() {
           >
             Откатить
           </button>
-          <button
+          <a
             className="frox-btn frox-btn-outline"
-            onClick={() => {
-              setEntries([]);
-              run(() => api.reset(), { highlight: false });
-            }}
-            disabled={busy || streaming}
+            href={api.templateUrl()}
+            title="Тот же план, что открывается по умолчанию — заполните и загрузите обратно"
           >
-            Демо-план
-          </button>
+            Скачать шаблон плана
+          </a>
         </div>
 
         {schedule && <ProjectSpine schedule={schedule} />}

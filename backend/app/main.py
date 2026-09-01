@@ -236,6 +236,21 @@ async def import_plan(
     return payload
 
 
+@app.get("/api/plan/template")
+def download_template() -> Response:
+    """Шаблон плана — тот же демо-план, что показывается при первом открытии.
+
+    Отдаётся из сида, а не из файла на диске: копия в samples/ нужна, чтобы
+    шаблон было видно в репозитории, и тест следит, что она не разошлась.
+    """
+    blob = plan_to_xlsx(seed_plan())
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="plan-template.xlsx"'},
+    )
+
+
 @app.get("/api/plan/export")
 def export_plan(
     session_id: Optional[str] = Query(None),

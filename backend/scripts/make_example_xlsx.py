@@ -1,7 +1,13 @@
-"""Generate samples/example_plan.xlsx — the file reviewers upload to try the app.
+"""Собрать файлы в samples/.
 
-Deliberately a different project from the seeded demo plan, so importing it
-visibly replaces the chart. Run from the backend directory:
+  * example_plan.xlsx — файл, который загружают, чтобы попробовать приложение.
+    Это намеренно другой проект, не демо-план: после импорта диаграмма заметно
+    меняется.
+  * plan_template.xlsx — шаблон, он же демо-план из сида. В репозитории лежит
+    для наглядности, приложение отдаёт его по /api/plan/template из того же
+    сида, а тест сверяет копию с сидом, чтобы они не разошлись.
+
+Запуск из каталога backend:
 
     ./.venv/bin/python scripts/make_example_xlsx.py
 """
@@ -16,8 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.excel_io import plan_to_xlsx  # noqa: E402
 from app.models import Plan, Task  # noqa: E402
+from app.seed import seed_plan  # noqa: E402
 
-OUT = Path(__file__).resolve().parents[2] / "samples" / "example_plan.xlsx"
+SAMPLES = Path(__file__).resolve().parents[2] / "samples"
+OUT = SAMPLES / "example_plan.xlsx"
+TEMPLATE = SAMPLES / "plan_template.xlsx"
 
 # (id, name, assignee, duration, predecessors, description)
 # (id, статус, прогресс) — в примере показаны все состояния разом
@@ -61,9 +70,13 @@ def main() -> None:
             for task_id, name, assignee, duration, preds, description in ROWS
         ],
     )
-    OUT.parent.mkdir(parents=True, exist_ok=True)
+    SAMPLES.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(plan_to_xlsx(plan))
     print(f"wrote {OUT} ({len(plan.tasks)} tasks)")
+
+    template = seed_plan()
+    TEMPLATE.write_bytes(plan_to_xlsx(template))
+    print(f"wrote {TEMPLATE} ({len(template.tasks)} tasks)")
 
 
 if __name__ == "__main__":

@@ -458,3 +458,37 @@ def test_plan_payload_lists_statuses_for_the_ui(sid):
     values = [s["value"] for s in body["statuses"]]
     assert values == ["planned", "in_progress", "done", "blocked"]
     assert all(s["label"] for s in body["statuses"])
+
+
+def test_template_endpoint_returns_the_demo_plan():
+    response = client.get("/api/plan/template")
+    assert response.status_code == 200
+    assert "plan-template.xlsx" in response.headers["content-disposition"]
+
+    from app.excel_io import plan_from_xlsx
+    from app.seed import seed_plan
+
+    seeded = seed_plan()
+    parsed = plan_from_xlsx(response.content, project_start=seeded.project_start)
+    assert [t.name for t in parsed.tasks] == [t.name for t in seeded.tasks]
+
+
+def test_committed_template_file_matches_the_seed():
+    """Копия в samples/ не должна разойтись с сидом.
+
+    Если тест упал — перегенерируйте её: backend/scripts/make_example_xlsx.py
+    """
+    from pathlib import Path
+
+    from app.excel_io import plan_from_xlsx
+    from app.seed import seed_plan
+
+    path = Path(__file__).resolve().parents[2] / "samples" / "plan_template.xlsx"
+    assert path.exists(), "нет samples/plan_template.xlsx"
+
+    seeded = seed_plan()
+    committed = plan_from_xlsx(path.read_bytes(), project_start=seeded.project_start)
+    assert [(t.id, t.name, t.duration_days, t.status) for t in committed.tasks] == [
+        (t.id, t.name, t.duration_days, t.status) for t in seeded.tasks
+    ]
+    assert [t.predecessors for t in committed.tasks] == [t.predecessors for t in seeded.tasks]
