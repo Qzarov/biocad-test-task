@@ -30,30 +30,13 @@ function stepFor(windowDays: number): ViewMode {
   return ViewMode.Month;
 }
 
+// Сколько дней приходится на колонку таймлайна — из этого считается ширина
+// колонки под окно просмотра. Позицию задаёт проп viewDate самой библиотеки.
 const DAYS_PER_COLUMN: Partial<Record<ViewMode, number>> = {
   [ViewMode.Day]: 1,
   [ViewMode.Week]: 7,
   [ViewMode.Month]: 30.44,
 };
-
-/** Сколько дней таймлайн рисует ДО старта проекта.
- *
- * Замерено на самой библиотеке (`preStepsCount={1}`): она начинает диаграмму с
- * начала дня/недели/месяца, содержащего старт, и отступает назад ещё на один
- * шаг. Без этой поправки позиция окна и позиция диаграммы расходятся — особенно
- * заметно на месячном шаге, где библиотека вдобавок дорисовывает целый год
- * после конца проекта, так что «доля прокрутки» здесь считаться не может.
- */
-function leadDays(mode: ViewMode, projectStart: string): number {
-  const start = new Date(`${projectStart}T00:00:00`);
-  if (mode === ViewMode.Day) return 1;
-  if (mode === ViewMode.Week) {
-    const sinceMonday = (start.getDay() + 6) % 7;
-    return sinceMonday + 7;
-  }
-  const previousMonthDays = new Date(start.getFullYear(), start.getMonth(), 0).getDate();
-  return start.getDate() - 1 + previousMonthDays;
-}
 
 const STEP_LABELS: Partial<Record<ViewMode, string>> = {
   [ViewMode.Day]: "дни",
@@ -242,6 +225,23 @@ export default function App() {
     ? new Date(`${schedule.project_start}T00:00:00`).getTime() + windowFrom * 86400000
     : 0;
   const viewDate = useMemo(() => new Date(viewDateTime), [viewDateTime]);
+  const pxPerDay = geometry.pxPerDay > 0 ? geometry.pxPerDay : columnWidth / daysPerColumn;
+
+  // Колесо двигает окно просмотра: при «всём проекте» двигать некуда, и вид
+  // просто стоит на месте — раньше диаграмма уезжала в пустой хвост таймлайна.
+  const panDays = useCallback(
+    (days: number) => {
+      if (!Number.isFinite(days) || Math.abs(days) < 0.01) return;
+      setView((current) => {
+        const length = current.days ?? totalDays;
+        const limit = Math.max(0, totalDays - length);
+        if (limit === 0) return current;
+        const next = Math.min(limit, Math.max(0, current.from + days));
+        return Math.round(next) === Math.round(current.from) ? current : { ...current, from: next };
+      });
+    },
+    [totalDays],
+  );
   const listWidth = columnsWidth(prefs.columns, prefs.columnWidths);
 
   // Кнопки отмены и возврата ходят по той же истории снимков, что и агент:
@@ -565,20 +565,8 @@ export default function App() {
               viewDate={viewDate}
               onViewport={setViewport}
               onGeometry={setGeometry}
-              onScrollLeft={(px) => {
-                if (!schedule || totalDays <= windowDays) return;
-                if (Date.now() < ignoreScrollUntil.current) return;
-                // обратный перевод — по замеренной геометрии полосок
-                const day =
-                  geometry.pxPerDay > 0
-                    ? (px - geometry.originPx) / geometry.pxPerDay
-                    : (px / Math.max(1, columnWidth)) * daysPerColumn -
-                      leadDays(viewMode, schedule.project_start);
-                const next = Math.min(Math.max(0, Math.round(day)), totalDays - windowDays);
-                // мелкие дрожания (округление до колонки) окно не двигают
-                if (Math.abs(next - windowFrom) < 2) return;
-                setView((current) => ({ ...current, from: next }));
-              }}
+              pxPerDay={pxPerDay}
+              onPan={panDays}
               onColumnWidth={(key, width) =>
                 setPrefs((current) => {
                   const columnWidths = { ...current.columnWidths };

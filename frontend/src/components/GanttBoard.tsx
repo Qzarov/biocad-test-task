@@ -48,7 +48,13 @@ interface Props {
    *  сколько пикселей приходится на день. Считать это из правил библиотеки
    *  нельзя: она по-разному расширяет диапазон для дня, недели и месяца. */
   onGeometry: (geometry: { originPx: number; pxPerDay: number }) => void;
-  onScrollLeft: (px: number) => void;
+  /** Пиксели на день — из замеренной геометрии; нужны, чтобы перевести
+   *  прокрутку колесом в дни. */
+  pxPerDay: number;
+  /** Горизонтальная прокрутка колесом двигает окно просмотра, а не диаграмму:
+   *  иначе диаграмма уезжает мимо шкалы, и следующая перерисовка возвращает её
+   *  к окну — со стороны это выглядит как сброс в начало. */
+  onPan: (days: number) => void;
   changed: string[];
   selectedId: string | null;
   filtered: boolean;
@@ -70,7 +76,8 @@ export function GanttBoard({
   onColumnWidth,
   onViewport,
   onGeometry,
-  onScrollLeft,
+  pxPerDay,
+  onPan,
   changed,
   selectedId,
   filtered,
@@ -97,7 +104,6 @@ export function GanttBoard({
   // диаграммой управляет им напрямую, а обратно мы слушаем скролл, чтобы шкала
   // не отставала, если человек прокрутил колесом или ползунком.
   const scroller = useRef<HTMLElement | null>(null);
-  const programmatic = useRef(false);
 
   useEffect(() => {
     const element = frame.current;
@@ -116,12 +122,18 @@ export function GanttBoard({
     const observer = new MutationObserver(attach);
     observer.observe(element, { childList: true, subtree: true });
 
-    const onScroll = () => {
-      const node = scroller.current;
-      if (!node || programmatic.current) return;
-      onScrollLeft(node.scrollLeft);
+    // Горизонтальное колесо (и Shift+колесо) перехватываем на погружении, до
+    // обработчика библиотеки: пусть двигается окно, а диаграмма следует за ним.
+    const onWheel = (event: WheelEvent) => {
+      const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      if (!horizontal) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
+      const perDay = pxPerDay > 0 ? pxPerDay : 6;
+      onPan(delta / perDay);
     };
-    element.addEventListener("scroll", onScroll, true);
+    element.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
     const sizes = new ResizeObserver(() => {
       if (scroller.current) onViewport(scroller.current.clientWidth);
@@ -131,9 +143,9 @@ export function GanttBoard({
     return () => {
       observer.disconnect();
       sizes.disconnect();
-      element.removeEventListener("scroll", onScroll, true);
+      element.removeEventListener("wheel", onWheel, true);
     };
-  }, [onViewport, onScrollLeft]);
+  }, [onViewport, onPan, pxPerDay]);
 
   // Геометрию снимаем с самих полосок: берём две задачи с разными датами старта
   // и получаем масштаб и точку отсчёта прямо из отрисованного, без догадок о
