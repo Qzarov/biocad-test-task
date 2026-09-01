@@ -135,6 +135,58 @@ export function GanttBoard({
     };
     element.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
+    // Перетаскивание пустого поля таймлайна — единственный способ двигать
+    // диаграмму пальцем: колеса на тач-устройствах нет, а полосу прокрутки мы
+    // убрали. Полоски задач и список не трогаем: там свои жесты.
+    let panning = false;
+    let axis: "x" | "y" | null = null;
+    let startX = 0;
+    let startY = 0;
+    let lastX = 0;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement | null;
+      if (!target || target.closest(".handleGroup") || target.closest(".gantt-row") || target.closest(".gantt-head")) {
+        return;
+      }
+      panning = true;
+      axis = null;
+      startX = lastX = event.clientX;
+      startY = event.clientY;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!panning) return;
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      if (!axis) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        // вертикальный жест отдаём странице: список должен прокручиваться
+        axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        if (axis === "y") {
+          panning = false;
+          return;
+        }
+        document.body.classList.add("is-panning");
+      }
+      event.preventDefault();
+      const perDay = pxPerDay > 0 ? pxPerDay : 6;
+      onPan(-(event.clientX - lastX) / perDay);
+      lastX = event.clientX;
+    };
+
+    const stopPan = () => {
+      panning = false;
+      axis = null;
+      document.body.classList.remove("is-panning");
+    };
+
+    element.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", stopPan);
+    window.addEventListener("pointercancel", stopPan);
+
     const sizes = new ResizeObserver(() => {
       if (scroller.current) onViewport(scroller.current.clientWidth);
     });
@@ -144,6 +196,11 @@ export function GanttBoard({
       observer.disconnect();
       sizes.disconnect();
       element.removeEventListener("wheel", onWheel, true);
+      element.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopPan);
+      window.removeEventListener("pointercancel", stopPan);
+      stopPan();
     };
   }, [onViewport, onPan, pxPerDay]);
 

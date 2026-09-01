@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ViewMode } from "gantt-task-react";
-import { FileSpreadsheet, Redo2, TriangleAlert, Undo2 } from "lucide-react";
+import {
+  Download,
+  FileDown,
+  FileSpreadsheet,
+  Redo2,
+  TriangleAlert,
+  Undo2,
+  Upload,
+} from "lucide-react";
 import { ApiError, api, sessionId, streamChat } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
 import { ColumnPicker, columnsWidth } from "./components/ColumnPicker";
@@ -57,6 +65,19 @@ export default function App() {
   const [view, setView] = useState<ViewWindow>(() => ({ from: 0, days: loadPrefs().windowDays }));
   const [viewport, setViewport] = useState(900);
   const [geometry, setGeometry] = useState({ originPx: 0, pxPerDay: 0 });
+  // На узком экране список в полную ширину выдавливает таймлайн за край: двигать
+  // диаграмму становится нечем. Поэтому там остаётся только колонка с названием,
+  // и та ограничена по ширине; настройки колонок при этом не теряются.
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 700px)");
+    const onChange = (event: MediaQueryListEvent) => setNarrow(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [changed, setChanged] = useState<string[]>([]);
@@ -211,7 +232,8 @@ export default function App() {
     Math.min(
       420,
       Math.max(
-        16,
+        // ниже ~22px подписи календаря в шапке библиотеки сливаются в кашу
+        22,
         // +1 колонка — библиотека рисует одну до старта проекта (preStepsCount)
         viewport / Math.max(1, windowDays / (DAYS_PER_COLUMN[viewMode] ?? 7) + 1),
       ),
@@ -242,7 +264,11 @@ export default function App() {
     },
     [totalDays],
   );
-  const listWidth = columnsWidth(prefs.columns, prefs.columnWidths);
+  const visibleColumns = narrow ? [] : prefs.columns;
+  const visibleWidths = narrow
+    ? { ...prefs.columnWidths, name: Math.min(168, prefs.columnWidths.name ?? 236) }
+    : prefs.columnWidths;
+  const listWidth = columnsWidth(visibleColumns, visibleWidths);
 
   // Кнопки отмены и возврата ходят по той же истории снимков, что и агент:
   // текущее состояние помечено is_current, всё до него — отмена, после — возврат.
@@ -479,11 +505,18 @@ export default function App() {
             className="frox-btn frox-btn-outline"
             onClick={() => fileInput.current?.click()}
             disabled={busy}
+            title="Загрузить план из Excel"
           >
-            Загрузить Excel
+            <Upload size={14} />
+            <span className="btn__label">Загрузить</span>
           </button>
-          <a className="frox-btn frox-btn-brand" href={api.exportUrl()}>
-            Скачать Excel
+          <a
+            className="frox-btn frox-btn-brand"
+            href={api.exportUrl()}
+            title="Скачать текущий план в Excel"
+          >
+            <Download size={14} />
+            <span className="btn__label">Скачать</span>
           </a>
           <span className="undo-pair">
             <button
@@ -508,9 +541,10 @@ export default function App() {
           <a
             className="frox-btn frox-btn-outline"
             href={api.templateUrl()}
-            title="Тот же план, что открывается по умолчанию — заполните и загрузите обратно"
+            title="Шаблон плана: тот же план, что открывается по умолчанию — заполните и загрузите обратно"
           >
-            Скачать шаблон плана
+            <FileDown size={14} />
+            <span className="btn__label">Шаблон</span>
           </a>
         </div>
 
@@ -559,8 +593,8 @@ export default function App() {
               schedule={visibleSchedule}
               viewMode={viewMode}
               columnWidth={columnWidth}
-              columns={prefs.columns}
-              columnWidths={prefs.columnWidths}
+              columns={visibleColumns}
+              columnWidths={visibleWidths}
               numbers={taskNumbers}
               viewDate={viewDate}
               onViewport={setViewport}

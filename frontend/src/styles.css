@@ -471,7 +471,9 @@ a.frox-btn {
 }
 
 body.is-brushing,
-body.is-brushing * {
+body.is-brushing *,
+body.is-panning,
+body.is-panning * {
   cursor: grabbing !important;
   user-select: none;
 }
@@ -628,6 +630,8 @@ body.is-brushing * {
 }
 
 .chart__frame {
+  /* горизонтальный жест — наш (перемещение окна), вертикальный отдаём странице */
+  touch-action: pan-y;
   flex: 1;
   min-height: 0;
   background: var(--bg-surface);
@@ -1278,17 +1282,30 @@ body.is-dragging-row * {
   border-top: 1px solid var(--border);
 }
 
+/* Кнопка отправки стоит рядом с полем и выровнена по его низу: раньше она
+   висела отдельной строкой под подсказкой и отъедала высоту. */
+.chat__input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .chat__composer textarea {
-  min-height: 72px;
+  flex: 1;
+  min-width: 0;
+  min-height: 68px;
   max-height: 190px;
 }
 
-.chat__composer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 10px;
+.chat__send {
+  flex: none;
+  height: 38px;
+}
+
+.chat__hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
 }
 
 .notice {
@@ -1675,7 +1692,57 @@ body.is-dragging-row * {
   }
 }
 
+@media (max-width: 900px) {
+  /* На узком экране у кнопок остаются иконки: подписи занимали две строки и
+     выдавливали шапку на пол-экрана. Смысл сохраняют title и aria-label. */
+  .actions {
+    gap: 6px;
+  }
+
+  .actions .frox-btn {
+    padding: 7px 9px;
+  }
+
+  .btn__label {
+    display: none;
+  }
+
+  .masthead {
+    padding: 12px 14px 10px;
+    gap: 10px 14px;
+  }
+
+  .masthead h1 {
+    font-size: 18px;
+  }
+
+  .stats {
+    gap: 3px 10px;
+    font-size: 12px;
+  }
+
+  .spine {
+    padding: 10px 12px;
+  }
+}
+
 @media (max-width: 700px) {
+  /* Спайн оставляем — это обзор всего проекта в одну полоску, на телефоне он
+     как раз полезен, когда таймлайн показывает лишь кусок. Прячем только его
+     легенду: она занимала три строки. Настройка колонок не нужна — колонок,
+     кроме названия, на телефоне нет. */
+  .spine {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .spine__legend {
+    display: none;
+  }
+
+  .chart__bar--list > .dropdown {
+    display: none;
+  }
+
   /* Панель над списком равна ширине списка (её задаёт инлайн-стиль), а на узком
      экране это шире окна — складываем панели в столбец. */
   .chart__bars {

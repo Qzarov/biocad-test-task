@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatEntry, Health, Mention, ModelInfo, ToolTrace } from "../types";
+import { Send, Square } from "lucide-react";
 import { Collapsible } from "./Collapsible";
 
 const SUGGESTIONS = [
@@ -235,68 +236,77 @@ export function ChatPanel({
           </div>
         )}
 
-        <textarea
-          ref={input}
-          className="frox-textarea"
-          value={draft}
-          placeholder="Например: сдвинь #5 на две недели или разгрузи @Егорова М."
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setMentionQuery(detectMention(event.target.value, event.target.selectionStart ?? 0));
-          }}
-          onClick={(event) => {
-            const element = event.currentTarget;
-            setMentionQuery(detectMention(element.value, element.selectionStart ?? 0));
-          }}
-          onBlur={() => setMentionQuery(null)}
-          onKeyDown={(event) => {
-            if (menuOpen) {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActive((value) => (value + 1) % matches.length);
-                return;
+        <div className="chat__input-row">
+          <textarea
+            ref={input}
+            className="frox-textarea"
+            value={draft}
+            placeholder="Например: сдвинь #5 на две недели или разгрузи @Егорова М."
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setMentionQuery(detectMention(event.target.value, event.target.selectionStart ?? 0));
+            }}
+            onClick={(event) => {
+              const element = event.currentTarget;
+              setMentionQuery(detectMention(element.value, element.selectionStart ?? 0));
+            }}
+            onBlur={() => setMentionQuery(null)}
+            onKeyDown={(event) => {
+              if (menuOpen) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActive((value) => (value + 1) % matches.length);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActive((value) => (value - 1 + matches.length) % matches.length);
+                  return;
+                }
+                if (event.key === "Enter" || event.key === "Tab") {
+                  event.preventDefault();
+                  accept(matches[active]);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setMentionQuery(null);
+                  return;
+                }
               }
-              if (event.key === "ArrowUp") {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
-                setActive((value) => (value - 1 + matches.length) % matches.length);
-                return;
+                send();
               }
-              if (event.key === "Enter" || event.key === "Tab") {
-                event.preventDefault();
-                accept(matches[active]);
-                return;
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setMentionQuery(null);
-                return;
-              }
-            }
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              send();
-            }
-          }}
-          disabled={disabled}
-        />
-        <div className="chat__composer-row">
-          <span className="hint">
-            {menuOpen ? "↑↓ — выбор, Enter — вставить" : "Ctrl/⌘ + Enter — отправить, @ — ссылка"}
-          </span>
+            }}
+            disabled={disabled}
+          />
+
           {streaming ? (
-            <button className="frox-btn frox-btn-outline frox-btn-danger" onClick={onStop}>
-              Остановить
+            <button
+              className="frox-btn frox-btn-outline frox-btn-danger chat__send"
+              onClick={onStop}
+              title="Остановить ход агента"
+            >
+              <Square size={14} />
+              <span className="btn__label">Стоп</span>
             </button>
           ) : (
             <button
-              className="frox-btn frox-btn-brand"
+              className="frox-btn frox-btn-brand chat__send"
               onClick={send}
               disabled={!draft.trim() || disabled}
+              title="Отправить (Ctrl/⌘ + Enter)"
             >
-              Отправить
+              <Send size={14} />
+              <span className="btn__label">Отправить</span>
             </button>
           )}
         </div>
+
+        <span className="hint chat__hint">
+          {menuOpen ? "↑↓ — выбор, Enter — вставить" : "Ctrl/⌘ + Enter — отправить · @ — ссылка на задачу или человека"}
+        </span>
       </div>
     </section>
   );
