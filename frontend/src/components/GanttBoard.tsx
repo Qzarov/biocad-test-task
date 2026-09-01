@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Gantt, ViewMode, type Task as GanttTask } from "gantt-task-react";
+import { GripVertical } from "lucide-react";
 import "gantt-task-react/dist/index.css";
-import type { ColumnKey, ScheduledTask, Schedule } from "../types";
+import type { ColumnKey, ColumnWidths, ScheduledTask, Schedule } from "../types";
 import { formatDate, formatDateNumeric } from "../format";
-import { OPTIONAL_COLUMNS, columnsWidth, gridTemplate } from "./ColumnPicker";
+import {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  OPTIONAL_COLUMNS,
+  columnsWidth,
+  gridTemplate,
+  widthOf,
+} from "./ColumnPicker";
+import { ColumnResizer } from "./ColumnResizer";
 
 const COLORS = {
   critical: { bar: "#3cb043", progress: "#228B22" },
@@ -22,12 +31,15 @@ interface Props {
   viewMode: ViewMode;
   columnWidth: number;
   columns: ColumnKey[];
+  columnWidths: ColumnWidths;
+  onColumnWidth: (key: ColumnKey | "name", width: number | null) => void;
   changed: string[];
   selectedId: string | null;
   filtered: boolean;
   onSelect: (taskId: string) => void;
   onOpen: (taskId: string) => void;
   onDrag: (taskId: string, start: string, durationDays: number) => void;
+  onReorder: (taskId: string, anchorId: string, position: "before" | "after") => void;
   onResetFilters: () => void;
 }
 
@@ -36,12 +48,15 @@ export function GanttBoard({
   viewMode,
   columnWidth,
   columns,
+  columnWidths,
+  onColumnWidth,
   changed,
   selectedId,
   filtered,
   onSelect,
   onOpen,
   onDrag,
+  onReorder,
   onResetFilters,
 }: Props) {
   const frame = useRef<HTMLDivElement>(null);
@@ -64,9 +79,87 @@ export function GanttBoard({
   }, [schedule]);
 
   const changedSet = useMemo(() => new Set(changed), [changed]);
-  const listWidth = `${columnsWidth(columns)}px`;
-  const template = gridTemplate(columns);
   const visibleColumns = OPTIONAL_COLUMNS.filter((column) => columns.includes(column.key));
+
+  // Пока границу тянут, ширина живёт здесь: в настройки она уходит на
+  // отпускании, иначе каждое движение мыши писало бы в localStorage.
+  const [draft, setDraft] = useState<{ key: ColumnKey | "name"; width: number } | null>(null);
+  const effectiveWidths: ColumnWidths = draft
+    ? { ...columnWidths, [draft.key]: draft.width }
+    : columnWidths;
+  const listWidth = `${columnsWidth(columns, effectiveWidths)}px`;
+  const template = gridTemplate(columns, effectiveWidths);
+
+  // Перетаскивание строк меняет только порядок в списке; чтобы это работало и
+  // при включённом фильтре, на сервер уходит не номер строки, а «до/после» какой
+  // задачи её поставить.
+  //
+  // Реализация на pointer-событиях, а не на HTML5 drag-and-drop: тянуть можно
+  // только за ручку (значит выделение текста и клики по строке не ломаются), и
+  // поведение одинаково для мыши, трекпада и тача.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ id: string; position: "before" | "after" } | null>(
+    null,
+  );
+
+  const startRowDrag = (taskId: string) => (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDragId(taskId);
+    document.body.classList.add("is-dragging-row");
+
+    let hint: { id: string; position: "before" | "after" } | null = null;
+
+    const move = (moveEvent: PointerEvent) => {
+      const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+      const row = element?.closest<HTMLElement>(".gantt-row");
+      const overId = row?.dataset.taskId;
+      if (!row || !overId || overId === taskId) {
+        hint = null;
+        setDropHint(null);
+        return;
+      }
+      const box = row.getBoundingClientRect();
+      hint = {
+        id: overId,
+        position: moveEvent.clientY < box.top + box.height / 2 ? "before" : "after",
+      };
+      setDropHint(hint);
+    };
+
+    const finish = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      document.body.classList.remove("is-dragging-row");
+      if (hint && hint.id !== taskId) onReorder(taskId, hint.id, hint.position);
+      setDragId(null);
+      setDropHint(null);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
+
+  const resizer = (key: ColumnKey | "name", label: string) => (
+    <ColumnResizer
+      width={widthOf(key, effectiveWidths)}
+      min={MIN_COLUMN_WIDTH[key]}
+      max={MAX_COLUMN_WIDTH}
+      label={label}
+      onDrag={(width) => setDraft({ key, width })}
+      onCommit={(width) => {
+        setDraft(null);
+        onColumnWidth(key, width);
+      }}
+      onReset={() => {
+        setDraft(null);
+        onColumnWidth(key, null);
+      }}
+    />
+  );
 
   const tasks: GanttTask[] = useMemo(
     () =>
@@ -142,10 +235,14 @@ export function GanttBoard({
       className="gantt-head"
       style={{ width: listWidth, height: HEADER_HEIGHT, gridTemplateColumns: template }}
     >
-      <span>Задача</span>
+      <span className="gantt-head__cell">
+        Задача
+        {resizer("name", "Задача")}
+      </span>
       {visibleColumns.map((column) => (
         <span key={column.key} className="gantt-head__cell">
           {column.label}
+          {resizer(column.key, column.label)}
         </span>
       ))}
     </div>
@@ -171,6 +268,8 @@ export function GanttBoard({
         const classes = ["gantt-row"];
         if (row.id === selectedId) classes.push("gantt-row--selected");
         if (changedSet.has(row.id)) classes.push("gantt-row--changed");
+        if (dragId === row.id) classes.push("gantt-row--dragging");
+        if (dropHint?.id === row.id) classes.push(`gantt-row--drop-${dropHint.position}`);
         return (
           <div
             key={row.id}
@@ -179,6 +278,7 @@ export function GanttBoard({
             role="button"
             tabIndex={0}
             title={`${row.name} — открыть детали`}
+            data-task-id={row.id}
             onClick={() => onSelect(row.id)}
             onDoubleClick={() => onOpen(row.id)}
             onKeyDown={(event) => {
@@ -189,6 +289,15 @@ export function GanttBoard({
             }}
           >
             <span className="gantt-row__name">
+              <GripVertical
+                className="gantt-row__grip"
+                size={14}
+                role="button"
+                aria-label={`Перетащить «${row.name}»`}
+                onPointerDown={startRowDrag(row.id)}
+                onClick={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+              />
               <i
                 className={
                   "gantt-row__flag" +

@@ -106,6 +106,11 @@ class TaskUpdate(BaseModel):
     unpin: bool = False
 
 
+class TaskReorder(BaseModel):
+    before: Optional[str] = None
+    after: Optional[str] = None
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
@@ -306,6 +311,22 @@ def patch_task(
     if not labels:
         return plan_payload(sid, plan)
     return apply_edit(sid, (plan, "; ".join(labels)), f"правка «{task_id}»")
+
+
+@app.post("/api/plan/tasks/{task_id}/reorder")
+def reorder_task(
+    task_id: str,
+    body: TaskReorder,
+    session_id: Optional[str] = Query(None),
+    x_session_id: Optional[str] = Header(None),
+) -> dict[str, Any]:
+    """Перетаскивание строки списка: поставить задачу до или после другой."""
+    sid = resolve_session(session_id, x_session_id)
+    try:
+        result = ops.reorder_task(current_plan(sid), task_id, before=body.before, after=body.after)
+    except ops.OpError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)})
+    return apply_edit(sid, result, f"порядок «{task_id}»")
 
 
 @app.delete("/api/plan/tasks/{task_id}")

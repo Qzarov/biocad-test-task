@@ -1,4 +1,4 @@
-import type { ColumnKey } from "./types";
+import type { ColumnKey, ColumnWidths } from "./types";
 
 /** Настройки вида: живут в браузере, потому что это предпочтения одного человека,
  *  а не часть плана. Читаются один раз при старте, пишутся при каждом изменении. */
@@ -7,12 +7,14 @@ const KEY = "gantt-agent-prefs";
 
 export interface Prefs {
   columns: ColumnKey[];
+  columnWidths: ColumnWidths; // только изменённые вручную; остальное — по умолчанию
   zoom: number; // 0..100, положение ползунка масштаба
   model: string | null;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   columns: ["assignee", "duration"],
+  columnWidths: {},
   zoom: 45,
   model: null,
 };
@@ -24,6 +26,10 @@ export function loadPrefs(): Prefs {
     const parsed = JSON.parse(raw) as Partial<Prefs>;
     return {
       columns: Array.isArray(parsed.columns) ? (parsed.columns as ColumnKey[]) : DEFAULT_PREFS.columns,
+      columnWidths:
+        parsed.columnWidths && typeof parsed.columnWidths === "object"
+          ? (parsed.columnWidths as ColumnWidths)
+          : {},
       zoom: typeof parsed.zoom === "number" ? Math.min(100, Math.max(0, parsed.zoom)) : DEFAULT_PREFS.zoom,
       model: typeof parsed.model === "string" ? parsed.model : null,
     };

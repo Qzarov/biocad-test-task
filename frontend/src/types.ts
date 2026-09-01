@@ -95,6 +95,9 @@ export interface ModelsResponse {
 /** Колонки списка задач, которые можно скрывать. «Задача» есть всегда. */
 export type ColumnKey = "assignee" | "duration" | "start" | "end" | "slack" | "progress";
 
+/** Ширины колонок списка. Ключ "name" — колонка «Задача». */
+export type ColumnWidths = Partial<Record<ColumnKey | "name", number>>;
+
 export interface TaskFilters {
   query: string;
   assignee: string;

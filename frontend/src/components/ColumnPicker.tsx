@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { ColumnKey } from "../types";
+import type { ColumnKey, ColumnWidths } from "../types";
 
 /** Какие колонки списка задач можно включать. «Задача» не отключается —
- *  без названия строка перестаёт быть строкой. Ширины нужны и для сетки
- *  строки, и для расчёта ширины всей левой части диаграммы. */
+ *  без названия строка перестаёт быть строкой. Ширины по умолчанию нужны и для
+ *  сетки строки, и для расчёта ширины всей левой части диаграммы; пользователь
+ *  может перетащить границу в шапке, и тогда его значение живёт в настройках. */
 export const OPTIONAL_COLUMNS: { key: ColumnKey; label: string; width: number }[] = [
   { key: "assignee", label: "Исполнитель", width: 124 },
   { key: "duration", label: "Дн.", width: 48 },
@@ -15,23 +16,54 @@ export const OPTIONAL_COLUMNS: { key: ColumnKey; label: string; width: number }[
 
 export const NAME_COLUMN_WIDTH = 236;
 
-export function columnsWidth(columns: ColumnKey[]): number {
-  const optional = OPTIONAL_COLUMNS.filter((column) => columns.includes(column.key));
-  const gaps = optional.length * 10;
-  return NAME_COLUMN_WIDTH + optional.reduce((sum, column) => sum + column.width, 0) + gaps + 28;
+/** Границы перетаскивания: слишком узкая колонка перестаёт что-либо показывать,
+ *  слишком широкая выдавливает таймлайн за пределы экрана. */
+export const MIN_COLUMN_WIDTH: Record<ColumnKey | "name", number> = {
+  name: 150,
+  assignee: 80,
+  duration: 44,
+  start: 78,
+  end: 78,
+  slack: 56,
+  progress: 62,
+};
+
+export const MAX_COLUMN_WIDTH = 460;
+
+export function defaultWidth(key: ColumnKey | "name"): number {
+  if (key === "name") return NAME_COLUMN_WIDTH;
+  return OPTIONAL_COLUMNS.find((column) => column.key === key)?.width ?? 96;
 }
 
-export function gridTemplate(columns: ColumnKey[]): string {
+export function widthOf(key: ColumnKey | "name", widths: ColumnWidths): number {
+  const value = widths[key];
+  if (typeof value !== "number") return defaultWidth(key);
+  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH[key], Math.round(value)));
+}
+
+export function columnsWidth(columns: ColumnKey[], widths: ColumnWidths): number {
   const optional = OPTIONAL_COLUMNS.filter((column) => columns.includes(column.key));
-  return ["minmax(0, 1fr)", ...optional.map((column) => `${column.width}px`)].join(" ");
+  const gaps = optional.length * 10;
+  const cells = optional.reduce((sum, column) => sum + widthOf(column.key, widths), 0);
+  return widthOf("name", widths) + cells + gaps + 28;
+}
+
+export function gridTemplate(columns: ColumnKey[], widths: ColumnWidths): string {
+  const optional = OPTIONAL_COLUMNS.filter((column) => columns.includes(column.key));
+  return [
+    `${widthOf("name", widths)}px`,
+    ...optional.map((column) => `${widthOf(column.key, widths)}px`),
+  ].join(" ");
 }
 
 interface Props {
   columns: ColumnKey[];
+  hasCustomWidths: boolean;
   onChange: (columns: ColumnKey[]) => void;
+  onResetWidths: () => void;
 }
 
-export function ColumnPicker({ columns, onChange }: Props) {
+export function ColumnPicker({ columns, hasCustomWidths, onChange, onResetWidths }: Props) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -89,6 +121,21 @@ export function ColumnPicker({ columns, onChange }: Props) {
               <span>{column.label}</span>
             </label>
           ))}
+
+          <div className="dropdown__footer">
+            <span className="hint">Ширину меняйте перетаскиванием границы в шапке</span>
+            {hasCustomWidths && (
+              <button
+                className="frox-btn frox-btn-outline frox-btn-sm"
+                onClick={() => {
+                  onResetWidths();
+                  setOpen(false);
+                }}
+              >
+                Сбросить ширины
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -147,3 +147,36 @@ def test_ops_never_mutate_the_input_plan():
     ops.delete_task(plan, "dizayn")
     ops.add_task(plan, name="Новая", duration_days=1)
     assert plan.model_dump_json() == before
+
+
+def test_reorder_task_before_and_after():
+    plan, msg = ops.reorder_task(base_plan(), "verstka", before="analiz")
+    assert [t.id for t in plan.tasks] == ["verstka", "analiz", "dizayn"]
+    assert "перед" in msg
+
+    plan, msg = ops.reorder_task(base_plan(), "analiz", after="verstka")
+    assert [t.id for t in plan.tasks] == ["dizayn", "verstka", "analiz"]
+    assert "после" in msg
+
+
+def test_reorder_task_keeps_dependencies_and_dates():
+    from app.scheduler import schedule_plan
+
+    before = {t.id: (t.start, t.end) for t in schedule_plan(base_plan()).tasks}
+    plan, _ = ops.reorder_task(base_plan(), "verstka", before="analiz")
+    after = {t.id: (t.start, t.end) for t in schedule_plan(plan).tasks}
+    assert before == after, "порядок строк не должен менять расчёт дат"
+    assert plan.task_by_id("verstka").predecessors == ["dizayn"]
+
+
+def test_reorder_task_requires_exactly_one_anchor():
+    with pytest.raises(ops.OpError):
+        ops.reorder_task(base_plan(), "analiz")
+    with pytest.raises(ops.OpError):
+        ops.reorder_task(base_plan(), "analiz", before="dizayn", after="verstka")
+
+
+def test_reorder_task_onto_itself_is_a_no_op():
+    plan, msg = ops.reorder_task(base_plan(), "analiz", before="analiz")
+    assert [t.id for t in plan.tasks] == ["analiz", "dizayn", "verstka"]
+    assert "уже" in msg

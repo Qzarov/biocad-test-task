@@ -385,9 +385,11 @@ export default function App() {
 
               <ColumnPicker
                 columns={prefs.columns}
+                hasCustomWidths={Object.keys(prefs.columnWidths).length > 0}
                 onChange={(columns: ColumnKey[]) =>
                   setPrefs((current) => ({ ...current, columns }))
                 }
+                onResetWidths={() => setPrefs((current) => ({ ...current, columnWidths: {} }))}
               />
             </div>
           </div>
@@ -419,6 +421,15 @@ export default function App() {
               viewMode={viewMode}
               columnWidth={columnWidth}
               columns={prefs.columns}
+              columnWidths={prefs.columnWidths}
+              onColumnWidth={(key, width) =>
+                setPrefs((current) => {
+                  const columnWidths = { ...current.columnWidths };
+                  if (width === null) delete columnWidths[key];
+                  else columnWidths[key] = width;
+                  return { ...current, columnWidths };
+                })
+              }
               changed={changed}
               selectedId={selectedId}
               filtered={isFilterActive(filters)}
@@ -428,6 +439,11 @@ export default function App() {
                 setSelectedId(id);
                 setOpenTaskId(id);
               }}
+              onReorder={(taskId, anchorId, position) =>
+                run(() =>
+                  api.reorderTask(taskId, position === "before" ? { before: anchorId } : { after: anchorId }),
+                )
+              }
               onDrag={(id, start, days) => {
                 const task = plan?.tasks.find((candidate) => candidate.id === id);
                 run(() =>

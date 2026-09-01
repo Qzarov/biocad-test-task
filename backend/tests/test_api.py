@@ -321,3 +321,24 @@ def test_chat_passes_the_selected_model_to_the_llm(sid, monkeypatch):
 
     assert captured.get("model") == picked
     assert events[-1]["type"] == "done" and events[-1]["model"] == picked
+
+
+def test_reorder_endpoint_moves_the_row(sid):
+    client.post("/api/plan/reset", params={"session_id": sid})
+    body = client.post(
+        "/api/plan/tasks/launch-prep/reorder",
+        params={"session_id": sid},
+        json={"before": "cell-line"},
+    )
+    assert body.status_code == 200, body.text
+    assert [t["id"] for t in body.json()["plan"]["tasks"]][:2] == ["launch-prep", "cell-line"]
+    # даты не поехали от смены порядка строк
+    assert body.json()["schedule"]["project_end"] == "2027-06-22"
+
+
+def test_reorder_endpoint_rejects_unknown_anchor(sid):
+    client.get("/api/plan", params={"session_id": sid})
+    response = client.post(
+        "/api/plan/tasks/dossier/reorder", params={"session_id": sid}, json={"after": "нет-такой"}
+    )
+    assert response.status_code == 400

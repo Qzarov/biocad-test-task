@@ -219,6 +219,18 @@ def reassign_tasks(
 
 
 @mcp.tool()
+def reorder_task(task: str, before: Optional[str] = None, after: Optional[str] = None) -> str:
+    """Переставить задачу в списке: before — поставить перед указанной задачей, after — после.
+
+    Меняет только порядок строк, даты и зависимости не затрагиваются.
+    """
+    return _apply(
+        lambda p: ops.reorder_task(p, task, before=before, after=after),
+        f"порядок «{task}»",
+    )
+
+
+@mcp.tool()
 def set_project_start(start: str) -> str:
     """Сдвинуть дату старта проекта (формат ГГГГ-ММ-ДД) — план пересчитается целиком."""
     return _apply(

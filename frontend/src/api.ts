@@ -84,6 +84,12 @@ export const api = {
     },
   ) => request<PlanPayload>(`/plan/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
 
+  reorderTask: (id: string, body: { before?: string; after?: string }) =>
+    request<PlanPayload>(`/plan/tasks/${encodeURIComponent(id)}/reorder`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   deleteTask: (id: string) =>
     request<PlanPayload>(`/plan/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
 

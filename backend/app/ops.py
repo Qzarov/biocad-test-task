@@ -292,6 +292,38 @@ def reassign_tasks(
     return new_plan, f"Переназначено задач: {len(targets)} → {to_assignee or 'не назначен'} ({names})"
 
 
+def reorder_task(
+    plan: Plan,
+    task: str,
+    before: Optional[str] = None,
+    after: Optional[str] = None,
+) -> tuple[Plan, str]:
+    """Переставить задачу в списке относительно другой задачи.
+
+    Порядок строк — это только представление (порядок строк Excel), на расчёт
+    дат он не влияет: даты задают длительности и зависимости. Опора на «до/после
+    задачи», а не на числовой индекс, потому что в интерфейсе может стоять
+    фильтр, и номер видимой строки не совпадает с номером в плане.
+    """
+    if bool(before) == bool(after):
+        raise OpError("Укажите ровно одно: before или after")
+
+    new_plan = _copy(plan)
+    target = resolve_task(new_plan, task)
+    anchor = resolve_task(new_plan, before or after or "")
+    if anchor.id == target.id:
+        return plan, f"«{target.name}» уже на этом месте"
+
+    new_plan.tasks = [t for t in new_plan.tasks if t.id != target.id]
+    anchor_index = new_plan.index_of(anchor.id)
+    position = anchor_index if before else anchor_index + 1
+    new_plan.tasks.insert(position, target)
+
+    _validate(new_plan)
+    where = "перед" if before else "после"
+    return new_plan, f"«{target.name}» перемещена {where} «{anchor.name}»"
+
+
 def set_project_start(plan: Plan, start: date) -> tuple[Plan, str]:
     """Move the whole project start date."""
     new_plan = _copy(plan)
