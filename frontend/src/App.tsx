@@ -697,6 +697,7 @@ export default function App() {
               columns={visibleColumns}
               columnWidths={visibleWidths}
               hideList={narrow}
+              pixelScroll={narrow}
               numbers={taskNumbers}
               viewDate={viewDate}
               onViewport={setViewport}

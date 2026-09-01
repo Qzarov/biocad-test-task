@@ -40,6 +40,10 @@ interface Props {
   /** Спрятать колонку списка совсем (мобильная диаграмма): таймлайн получает всю
    *  ширину, а название задачи рисуется подписью у полоски. */
   hideList?: boolean;
+  /** Телефон: жест двигает саму диаграмму в пикселях, а не окно шкалы. Окно
+   *  задаёт левый край датой, и библиотека прижимает её к границе колонки —
+   *  на неделях это шаг в 64 пикселя, из-за которого прокрутка шла рывками. */
+  pixelScroll?: boolean;
   /** Дата у левого края таймлайна — ею управляет шкала над диаграммой.
    *  Прокрутку двигаем именно этим пропом: библиотека держит позицию в своём
    *  состоянии и перебивает прямую запись scrollLeft. */
@@ -76,6 +80,7 @@ export function GanttBoard({
   columnWidths,
   numbers,
   hideList = false,
+  pixelScroll = false,
   viewDate,
   onColumnWidth,
   onViewport,
@@ -181,12 +186,14 @@ export function GanttBoard({
   const panRef = useRef(onPan);
   const pxPerDayRef = useRef(pxPerDay);
   const beginReorderRef = useRef(beginReorder);
+  const pixelScrollRef = useRef(pixelScroll);
 
   useEffect(() => {
     panRef.current = onPan;
     pxPerDayRef.current = pxPerDay;
     beginReorderRef.current = beginReorder;
-  }, [onPan, pxPerDay, beginReorder]);
+    pixelScrollRef.current = pixelScroll;
+  }, [onPan, pxPerDay, beginReorder, pixelScroll]);
 
   useEffect(() => {
     const element = frame.current;
@@ -222,7 +229,10 @@ export function GanttBoard({
 
     // Горизонтальное колесо (и Shift+колесо) перехватываем на погружении, до
     // обработчика библиотеки: пусть двигается окно, а диаграмма следует за ним.
+    // Свои же синтетические колёса (см. nudge) пропускаем насквозь.
+    let synthetic = false;
     const onWheel = (event: WheelEvent) => {
+      if (synthetic) return;
       const horizontal = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
       if (!horizontal) return;
       event.preventDefault();
@@ -233,9 +243,22 @@ export function GanttBoard({
     };
     element.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
+    // Единственный путь, которым библиотека соглашается прокручиваться на
+    // произвольное число пикселей, — её собственный обработчик колеса: прямая
+    // запись scrollTop/scrollLeft глотается её флагом ignoreScrollEvent, а проп
+    // viewDate умеет только целые колонки. Поэтому жест пальца переводим в
+    // колесо и отдаём библиотеке — она сама зажимает позицию в границы.
+    const nudge = (target: EventTarget | null, deltaX: number, deltaY: number) => {
+      const node = (target instanceof Element ? target : null) ?? element.firstElementChild;
+      if (!node) return;
+      synthetic = true;
+      node.dispatchEvent(new WheelEvent("wheel", { deltaX, deltaY, bubbles: true, cancelable: true }));
+      synthetic = false;
+    };
+
     // Один автомат на все жесты внутри диаграммы:
     //   • сдвиг в сторону (по полю или по списку задач) — прокрутка по времени;
-    //   • сдвиг вверх-вниз — обычная прокрутка списка, отдаём странице;
+    //   • сдвиг вверх-вниз — прокрутка строк диаграммы;
     //   • нажатие и удержание на строке — перенос задачи (на телефоне это
     //     единственный способ: свайп там занят прокруткой).
     const LONG_PRESS_MS = 420;
@@ -246,6 +269,7 @@ export function GanttBoard({
     let startX = 0;
     let startY = 0;
     let lastX = 0;
+    let lastY = 0;
     let pressTimer = 0;
     let pressedRow: string | null = null;
 
@@ -267,7 +291,7 @@ export function GanttBoard({
       panning = true;
       axis = null;
       startX = lastX = event.clientX;
-      startY = event.clientY;
+      startY = lastY = event.clientY;
 
       const row = target.closest<HTMLElement>(".gantt-row");
       const rowId = row?.dataset.taskId ?? null;
@@ -292,16 +316,20 @@ export function GanttBoard({
         if (Math.abs(dx) < AXIS_THRESHOLD && Math.abs(dy) < AXIS_THRESHOLD) return;
         cancelPress();
         axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-        if (axis === "y") {
-          panning = false;
-          return;
-        }
         document.body.classList.add("is-panning");
       }
       event.preventDefault();
-      const perDay = pxPerDayRef.current > 0 ? pxPerDayRef.current : 6;
-      panRef.current(-(event.clientX - lastX) / perDay);
+
+      if (axis === "y") {
+        nudge(event.target, 0, -(event.clientY - lastY));
+      } else if (pixelScrollRef.current) {
+        nudge(event.target, -(event.clientX - lastX), 0);
+      } else {
+        const perDay = pxPerDayRef.current > 0 ? pxPerDayRef.current : 6;
+        panRef.current(-(event.clientX - lastX) / perDay);
+      }
       lastX = event.clientX;
+      lastY = event.clientY;
     };
 
     const stopPan = () => {
