@@ -20,7 +20,7 @@ from typing import Callable, Optional
 from mcp.server.fastmcp import FastMCP
 
 from .. import ops
-from ..models import Plan
+from ..models import STATUS_LABELS, Plan
 from ..scheduler import schedule_plan
 from ..seed import seed_plan
 from ..store import DEFAULT_DB_PATH, PlanStore
@@ -74,7 +74,7 @@ def get_plan() -> str:
     ]
     for index, t in enumerate(schedule.tasks, start=1):
         preds = ", ".join(names.get(p, p) for p in t.predecessors) or "—"
-        flags = []
+        flags = [f"статус: {STATUS_LABELS[t.status]}"]
         if t.is_critical:
             flags.append("критический путь")
         if t.is_pinned:
@@ -140,10 +140,13 @@ def update_task(
     assignee: Optional[str] = None,
     duration_days: Optional[int] = None,
     progress: Optional[int] = None,
+    status: Optional[str] = None,
 ) -> str:
-    """Изменить поля задачи: название, описание, исполнителя, длительность, прогресс.
+    """Изменить поля задачи: название, описание, исполнителя, длительность, прогресс, статус.
 
-    task — id или название задачи. Передавай только те поля, которые меняешь.
+    task — id, номер (#5) или название задачи. Передавай только те поля, которые меняешь.
+    status — planned, in_progress, done или blocked (принимаются и подписи «не начата»,
+    «в работе», «готова», «заблокирована»). Статус и прогресс держатся согласованными.
     """
     return _apply(
         lambda p: ops.update_task(
@@ -154,6 +157,7 @@ def update_task(
             assignee=assignee,
             duration_days=duration_days,
             progress=progress,
+            status=status,
         ),
         f"изменена задача «{task}»",
     )
@@ -175,6 +179,15 @@ def set_predecessors(task: str, predecessors: list[str]) -> str:
     return _apply(
         lambda p: ops.set_predecessors(p, task, predecessors), f"зависимости «{task}»"
     )
+
+
+@mcp.tool()
+def set_successors(task: str, successors: list[str]) -> str:
+    """Задать список задач, которые зависят от этой (обратная сторона set_predecessors).
+
+    Пустой список — снять все зависимости от этой задачи.
+    """
+    return _apply(lambda p: ops.set_successors(p, task, successors), f"последователи «{task}»")
 
 
 @mcp.tool()

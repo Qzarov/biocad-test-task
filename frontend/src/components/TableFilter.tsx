@@ -1,14 +1,18 @@
+import { STATUS_LABELS, STATUS_ORDER } from "../types";
 import type { ScheduledTask, TaskFilters } from "../types";
 
 export const EMPTY_FILTERS: TaskFilters = {
   query: "",
   assignee: "",
+  status: "",
   criticalOnly: false,
   pinnedOnly: false,
 };
 
 export function isFilterActive(filters: TaskFilters): boolean {
-  return Boolean(filters.query || filters.assignee || filters.criticalOnly || filters.pinnedOnly);
+  return Boolean(
+    filters.query || filters.assignee || filters.status || filters.criticalOnly || filters.pinnedOnly,
+  );
 }
 
 /** Фильтр применяется к уже рассчитанному расписанию: планировщик всегда считает
@@ -20,6 +24,7 @@ export function applyFilters(tasks: ScheduledTask[], filters: TaskFilters): Sche
     if (filters.criticalOnly && !task.is_critical) return false;
     if (filters.pinnedOnly && !task.is_pinned) return false;
     if (filters.assignee && task.assignee !== filters.assignee) return false;
+    if (filters.status && task.status !== filters.status) return false;
     if (!query) return true;
     return (
       task.name.toLowerCase().includes(query) ||
@@ -60,6 +65,21 @@ export function TableFilter({ filters, assignees, shown, total, onChange }: Prop
         {assignees.map((assignee) => (
           <option key={assignee} value={assignee}>
             {assignee}
+          </option>
+        ))}
+      </select>
+
+      <select
+        className="frox-select filters__status"
+        value={filters.status}
+        onChange={(event) =>
+          onChange({ ...filters, status: event.target.value as TaskFilters["status"] })
+        }
+      >
+        <option value="">Любой статус</option>
+        {STATUS_ORDER.map((status) => (
+          <option key={status} value={status}>
+            {STATUS_LABELS[status]}
           </option>
         ))}
       </select>

@@ -156,6 +156,14 @@ _ROWS: list[tuple[str, str, str, int, list[str], str]] = [
 ]
 
 
+# Проект в демо только начинается, поэтому «готовых» задач нет: врать про
+# выполненные работы в примере не хочется. Разнообразие статусов показывает
+# samples/example_plan.xlsx.
+_STATUSES: dict[str, tuple[str, int]] = {
+    "cell-line": ("in_progress", 15),
+}
+
+
 def seed_plan(project_start: date | None = None) -> Plan:
     """Build the demo plan. Fresh every call — never share a mutable instance."""
     return Plan(
@@ -169,6 +177,8 @@ def seed_plan(project_start: date | None = None) -> Plan:
                 assignee=assignee,
                 duration_days=duration,
                 predecessors=list(preds),
+                status=_STATUSES.get(task_id, ("planned", 0))[0],
+                progress=_STATUSES.get(task_id, ("planned", 0))[1],
             )
             for task_id, name, assignee, duration, preds, description in _ROWS
         ],

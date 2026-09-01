@@ -26,7 +26,7 @@ from . import ops
 from .agent.loop import run_turn, transcript
 from .config import settings
 from .excel_io import ExcelImportError, meta_from_xlsx, plan_from_xlsx, plan_to_xlsx
-from .models import Plan, PlanError
+from .models import STATUS_LABELS, Plan, PlanError
 from .scheduler import schedule_plan
 from .seed import seed_plan
 from .store import PlanStore
@@ -58,6 +58,9 @@ def plan_payload(session_id: str, plan: Plan, changed: Optional[list[str]] = Non
         raise HTTPException(status_code=409, detail={"message": exc.message, "details": exc.details})
     return {
         "session_id": session_id,
+        "statuses": [
+            {"value": status.value, "label": label} for status, label in STATUS_LABELS.items()
+        ],
         "plan": json.loads(plan.model_dump_json()),
         "schedule": json.loads(schedule.model_dump_json()),
         "history": store.history(session_id),
@@ -91,6 +94,7 @@ class TaskCreate(BaseModel):
     description: str = ""
     assignee: str = ""
     duration_days: int = Field(1, ge=1)
+    status: Optional[str] = None
     predecessors: list[str] = Field(default_factory=list)
     after: Optional[str] = None
 
@@ -101,7 +105,9 @@ class TaskUpdate(BaseModel):
     assignee: Optional[str] = None
     duration_days: Optional[int] = None
     progress: Optional[int] = None
+    status: Optional[str] = None
     predecessors: Optional[list[str]] = None
+    successors: Optional[list[str]] = None
     start: Optional[date] = Field(None, description="Pin the task to this start date")
     unpin: bool = False
 
@@ -284,7 +290,14 @@ def patch_task(
     try:
         if any(
             v is not None
-            for v in (body.name, body.description, body.assignee, body.duration_days, body.progress)
+            for v in (
+                body.name,
+                body.description,
+                body.assignee,
+                body.duration_days,
+                body.progress,
+                body.status,
+            )
         ):
             plan, message = ops.update_task(
                 plan,
@@ -294,10 +307,14 @@ def patch_task(
                 assignee=body.assignee,
                 duration_days=body.duration_days,
                 progress=body.progress,
+                status=body.status,
             )
             labels.append(message)
         if body.predecessors is not None:
             plan, message = ops.set_predecessors(plan, task_id, body.predecessors)
+            labels.append(message)
+        if body.successors is not None:
+            plan, message = ops.set_successors(plan, task_id, body.successors)
             labels.append(message)
         if body.unpin:
             plan, message = ops.unpin_task(plan, task_id)

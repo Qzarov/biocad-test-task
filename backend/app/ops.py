@@ -17,7 +17,7 @@ import re
 from datetime import date, timedelta
 from typing import Optional
 
-from .models import Plan, PlanError, Task
+from .models import STATUS_LABELS, Plan, PlanError, Task, TaskStatus
 from .scheduler import schedule_plan
 
 
@@ -157,6 +157,28 @@ def add_task(
     )
 
 
+def parse_status(value: str) -> TaskStatus:
+    """Принять статус кодом («in_progress») или человеческой подписью («в работе»)."""
+    text = (value or "").strip().lower()
+    for status, label in STATUS_LABELS.items():
+        if text in {status.value, label}:
+            return status
+    aliases = {
+        "не начата": TaskStatus.PLANNED, "не начато": TaskStatus.PLANNED,
+        "новая": TaskStatus.PLANNED, "planned": TaskStatus.PLANNED, "todo": TaskStatus.PLANNED,
+        "в работе": TaskStatus.IN_PROGRESS, "выполняется": TaskStatus.IN_PROGRESS,
+        "делается": TaskStatus.IN_PROGRESS, "in progress": TaskStatus.IN_PROGRESS,
+        "готова": TaskStatus.DONE, "готово": TaskStatus.DONE, "завершена": TaskStatus.DONE,
+        "выполнена": TaskStatus.DONE, "done": TaskStatus.DONE, "выполнено": TaskStatus.DONE,
+        "заблокирована": TaskStatus.BLOCKED, "заблокировано": TaskStatus.BLOCKED,
+        "блок": TaskStatus.BLOCKED, "blocked": TaskStatus.BLOCKED,
+    }
+    if text in aliases:
+        return aliases[text]
+    allowed = ", ".join(f"{s.value} ({label})" for s, label in STATUS_LABELS.items())
+    raise OpError(f"Неизвестный статус «{value}». Допустимые: {allowed}")
+
+
 def update_task(
     plan: Plan,
     task: str,
@@ -165,8 +187,14 @@ def update_task(
     assignee: Optional[str] = None,
     duration_days: Optional[int] = None,
     progress: Optional[int] = None,
+    status: Optional[str] = None,
 ) -> tuple[Plan, str]:
-    """Change scalar fields of a task. Only the arguments given are touched."""
+    """Change scalar fields of a task. Only the arguments given are touched.
+
+    Статус и прогресс держим согласованными: «готова» с прогрессом 40% —
+    противоречивые данные, которым никто не поверит. Явно переданное значение
+    всегда сильнее выведенного.
+    """
     new_plan = _copy(plan)
     target = resolve_task(new_plan, task)
     changes: list[str] = []
@@ -194,6 +222,26 @@ def update_task(
         if int(progress) != target.progress:
             changes.append(f"прогресс → {int(progress)}%")
             target.progress = int(progress)
+
+    if status is not None:
+        wanted = parse_status(status)
+        if wanted != target.status:
+            changes.append(f"статус → {STATUS_LABELS[wanted]}")
+            target.status = wanted
+        if wanted is TaskStatus.DONE and progress is None and target.progress != 100:
+            target.progress = 100
+            changes.append("прогресс → 100%")
+        if wanted is TaskStatus.PLANNED and progress is None and target.progress != 0:
+            target.progress = 0
+            changes.append("прогресс → 0%")
+    elif progress is not None:
+        # прогресс без явного статуса тоже не должен противоречить статусу
+        if int(progress) == 100 and target.status not in (TaskStatus.DONE, TaskStatus.BLOCKED):
+            target.status = TaskStatus.DONE
+            changes.append("статус → готова")
+        elif 0 < int(progress) < 100 and target.status is TaskStatus.PLANNED:
+            target.status = TaskStatus.IN_PROGRESS
+            changes.append("статус → в работе")
 
     if not changes:
         return plan, f"Задача «{target.name}» уже в таком состоянии, изменений нет"
@@ -231,6 +279,43 @@ def set_predecessors(plan: Plan, task: str, predecessors: list[str]) -> tuple[Pl
     _validate(new_plan)
     names = ", ".join(new_plan.task_by_id(p).name for p in resolved) or "нет"
     return new_plan, f"Предшественники «{target.name}»: {names}"
+
+
+def set_successors(plan: Plan, task: str, successors: list[str]) -> tuple[Plan, str]:
+    """Задать, какие задачи зависят от этой.
+
+    Обратная сторона `set_predecessors`: связь хранится у зависимой задачи, но
+    человеку удобно править её с обеих сторон — «после этой идут вот эти».
+    """
+    new_plan = _copy(plan)
+    target = resolve_task(new_plan, task)
+    wanted = set(_resolve_many(new_plan, successors))
+    if target.id in wanted:
+        raise OpError("Задача не может зависеть от себя")
+
+    added: list[str] = []
+    removed: list[str] = []
+    for other in new_plan.tasks:
+        if other.id == target.id:
+            continue
+        depends = target.id in other.predecessors
+        if other.id in wanted and not depends:
+            other.predecessors = [*other.predecessors, target.id]
+            added.append(other.name)
+        elif other.id not in wanted and depends:
+            other.predecessors = [p for p in other.predecessors if p != target.id]
+            removed.append(other.name)
+
+    if not added and not removed:
+        return plan, f"Связи «{target.name}» уже такие"
+
+    _validate(new_plan)
+    parts = []
+    if added:
+        parts.append(f"добавлены: {', '.join(added)}")
+    if removed:
+        parts.append(f"убраны: {', '.join(removed)}")
+    return new_plan, f"Зависящие от «{target.name}» — {'; '.join(parts)}"
 
 
 def shift_task(plan: Plan, task: str, days: int) -> tuple[Plan, str]:

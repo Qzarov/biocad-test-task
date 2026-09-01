@@ -419,3 +419,42 @@ def test_agent_understands_a_task_number(sid, monkeypatch):
     assert result["ok"] is True
     # третья задача демо-плана — «Отработка downstream-процесса»
     assert "downstream" in result["text"]
+
+
+def test_patch_task_sets_status_and_successors(sid):
+    client.post("/api/plan/reset", params={"session_id": sid})
+
+    body = client.patch(
+        "/api/plan/tasks/upstream",
+        params={"session_id": sid},
+        json={"status": "в работе", "assignee": "Егорова М.", "successors": ["stability"]},
+    )
+    assert body.status_code == 200, body.text
+    plan = {t["id"]: t for t in body.json()["plan"]["tasks"]}
+    assert plan["upstream"]["status"] == "in_progress"
+    assert plan["upstream"]["assignee"] == "Егорова М."
+    # связь хранится у зависимой задачи
+    assert "upstream" in plan["stability"]["predecessors"]
+
+    # статус «готова» подтягивает прогресс
+    done = client.patch(
+        "/api/plan/tasks/upstream", params={"session_id": sid}, json={"status": "done"}
+    ).json()
+    task = next(t for t in done["plan"]["tasks"] if t["id"] == "upstream")
+    assert (task["status"], task["progress"]) == ("done", 100)
+
+
+def test_patch_task_rejects_a_bad_status(sid):
+    client.get("/api/plan", params={"session_id": sid})
+    response = client.patch(
+        "/api/plan/tasks/upstream", params={"session_id": sid}, json={"status": "почти"}
+    )
+    assert response.status_code == 400
+    assert "статус" in response.json()["detail"]["message"].lower()
+
+
+def test_plan_payload_lists_statuses_for_the_ui(sid):
+    body = client.get("/api/plan", params={"session_id": sid}).json()
+    values = [s["value"] for s in body["statuses"]]
+    assert values == ["planned", "in_progress", "done", "blocked"]
+    assert all(s["label"] for s in body["statuses"])

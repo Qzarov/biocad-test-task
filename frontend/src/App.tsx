@@ -562,6 +562,7 @@ export default function App() {
           computed={openComputed}
           allTasks={plan?.tasks ?? []}
           successors={successors}
+          assignees={assigneeOptions}
           busy={busy}
           onClose={() => setOpenTaskId(null)}
           onSave={async (patch) => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PlanTask, ScheduledTask } from "../types";
+import { STATUS_LABELS, STATUS_ORDER } from "../types";
+import type { PlanTask, ScheduledTask, TaskStatus } from "../types";
 import { formatDate, plural } from "../format";
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   computed: ScheduledTask;
   allTasks: PlanTask[];
   successors: PlanTask[];
+  assignees: string[];
   busy: boolean;
   onClose: () => void;
   onSave: (patch: {
@@ -15,21 +17,24 @@ interface Props {
     assignee?: string;
     duration_days?: number;
     progress?: number;
+    status?: string;
     predecessors?: string[];
+    successors?: string[];
     start?: string;
     unpin?: boolean;
   }) => void;
   onDelete: () => void;
 }
 
-/** Task details. Read-only facts on top (they come from the scheduler and cannot
- *  be typed in), editable fields below — the distinction is the point of the
- *  layout: dates are derived, everything else is input. */
+/** Детали задачи. Сверху — то, что считает планировщик и что нельзя ввести
+ *  руками, ниже — поля. Связи правятся с обеих сторон: сама связь хранится у
+ *  зависимой задачи, но думать удобно и «после кого», и «кто после». */
 export function TaskModal({
   task,
   computed,
   allTasks,
   successors,
+  assignees,
   busy,
   onClose,
   onSave,
@@ -40,8 +45,11 @@ export function TaskModal({
   const [assignee, setAssignee] = useState(task.assignee);
   const [duration, setDuration] = useState(String(task.duration_days));
   const [progress, setProgress] = useState(String(task.progress));
+  const [status, setStatus] = useState<TaskStatus>(task.status);
   const [predecessors, setPredecessors] = useState<string[]>(task.predecessors);
+  const [successorIds, setSuccessorIds] = useState<string[]>(successors.map((item) => item.id));
   const [pin, setPin] = useState(task.start_no_earlier_than ?? "");
+  const [linkQuery, setLinkQuery] = useState("");
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -51,18 +59,31 @@ export function TaskModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const candidates = useMemo(
-    () => allTasks.filter((candidate) => candidate.id !== task.id),
-    [allTasks, task.id],
-  );
+  const numbers = useMemo(() => {
+    const map: Record<string, number> = {};
+    allTasks.forEach((item, index) => {
+      map[item.id] = index + 1;
+    });
+    return map;
+  }, [allTasks]);
 
+  const candidates = useMemo(() => {
+    const query = linkQuery.trim().toLowerCase();
+    return allTasks
+      .filter((candidate) => candidate.id !== task.id)
+      .filter((candidate) => !query || candidate.name.toLowerCase().includes(query));
+  }, [allTasks, task.id, linkQuery]);
+
+  const initialSuccessors = successors.map((item) => item.id).join(",");
   const dirty =
     name !== task.name ||
     description !== task.description ||
     assignee !== task.assignee ||
     Number(duration) !== task.duration_days ||
     Number(progress) !== task.progress ||
+    status !== task.status ||
     predecessors.join(",") !== task.predecessors.join(",") ||
+    successorIds.join(",") !== initialSuccessors ||
     pin !== (task.start_no_earlier_than ?? "");
 
   const save = () => {
@@ -72,7 +93,9 @@ export function TaskModal({
     if (assignee !== task.assignee) patch.assignee = assignee;
     if (Number(duration) !== task.duration_days) patch.duration_days = Number(duration);
     if (Number(progress) !== task.progress) patch.progress = Number(progress);
+    if (status !== task.status) patch.status = status;
     if (predecessors.join(",") !== task.predecessors.join(",")) patch.predecessors = predecessors;
+    if (successorIds.join(",") !== initialSuccessors) patch.successors = successorIds;
     if (pin !== (task.start_no_earlier_than ?? "")) {
       if (pin) patch.start = pin;
       else patch.unpin = true;
@@ -80,18 +103,28 @@ export function TaskModal({
     onSave(patch);
   };
 
+  const toggle = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+
   return (
     <div className="overlay" role="dialog" aria-modal="true" onMouseDown={onClose}>
       <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
         <header className="modal__head">
           <div>
-            <span className="modal__id num">{task.id}</span>
+            <span className="modal__id num">
+              #{numbers[task.id] ?? "—"} · {task.id}
+            </span>
             <h2 className="modal__title">{task.name}</h2>
             <div className="chips">
+              <span className={`chip chip--status-${computed.status}`}>
+                {STATUS_LABELS[computed.status]}
+              </span>
               {computed.is_critical ? (
                 <span className="chip chip--critical">критический путь</span>
               ) : (
-                <span className="chip">запас {plural(computed.slack_days, "день", "дня", "дней")}</span>
+                <span className="chip">
+                  запас {plural(computed.slack_days, "день", "дня", "дней")}
+                </span>
               )}
               {computed.is_pinned && <span className="chip chip--pinned">дата закреплена</span>}
               {computed.progress > 0 && <span className="chip">готово {computed.progress}%</span>}
@@ -118,7 +151,9 @@ export function TaskModal({
             </div>
             <div className="readout__item">
               <span className="readout__label">Запас</span>
-              <span className="readout__value">{computed.is_critical ? "0" : computed.slack_days}</span>
+              <span className="readout__value">
+                {computed.is_critical ? "0" : computed.slack_days}
+              </span>
             </div>
           </div>
 
@@ -151,12 +186,39 @@ export function TaskModal({
               <label className="frox-field-label" htmlFor="task-assignee">
                 Исполнитель
               </label>
+              {/* Список подсказывает тех, кто уже есть в плане (меньше опечаток,
+                  из-за которых появляются «двойники»), но нового человека можно
+                  просто напечатать. */}
               <input
                 id="task-assignee"
                 className="frox-input"
+                list="assignee-options"
+                placeholder="не назначен"
                 value={assignee}
                 onChange={(event) => setAssignee(event.target.value)}
               />
+              <datalist id="assignee-options">
+                {assignees.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            </div>
+            <div className="frox-field">
+              <label className="frox-field-label" htmlFor="task-status">
+                Статус
+              </label>
+              <select
+                id="task-status"
+                className="frox-select"
+                value={status}
+                onChange={(event) => setStatus(event.target.value as TaskStatus)}
+              >
+                {STATUS_ORDER.map((option) => (
+                  <option key={option} value={option}>
+                    {STATUS_LABELS[option]}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="frox-field">
               <label className="frox-field-label" htmlFor="task-duration">
@@ -200,42 +262,61 @@ export function TaskModal({
           </div>
 
           <div className="frox-field">
-            <span className="frox-field-label">Предшественники</span>
-            <div className="deps">
-              {candidates.length === 0 && <span className="hint">Других задач в плане нет</span>}
-              {candidates.map((candidate) => (
-                <label key={candidate.id} className="frox-toggle-label">
-                  <input
-                    className="frox-checkbox"
-                    type="checkbox"
-                    checked={predecessors.includes(candidate.id)}
-                    onChange={(event) =>
-                      setPredecessors((current) =>
-                        event.target.checked
-                          ? [...current, candidate.id]
-                          : current.filter((id) => id !== candidate.id),
-                      )
-                    }
-                  />
-                  <span>{candidate.name}</span>
-                </label>
-              ))}
+            <div className="links__head">
+              <span className="frox-field-label">Связи</span>
+              <input
+                className="frox-input links__search"
+                type="search"
+                value={linkQuery}
+                placeholder="Найти задачу"
+                onChange={(event) => setLinkQuery(event.target.value)}
+              />
             </div>
-          </div>
-
-          <div className="frox-field">
-            <span className="frox-field-label">Зависят от этой задачи</span>
-            {successors.length ? (
-              <div className="linkrow">
-                {successors.map((successor) => (
-                  <span key={successor.id} className="linkrow__item">
-                    {successor.name}
-                  </span>
-                ))}
+            <div className="links">
+              <div className="links__col">
+                <span className="links__title">Идут до этой задачи</span>
+                <div className="deps">
+                  {candidates.length === 0 && <span className="hint">Ничего не найдено</span>}
+                  {candidates.map((candidate) => (
+                    <label key={candidate.id} className="frox-toggle-label">
+                      <input
+                        className="frox-checkbox"
+                        type="checkbox"
+                        checked={predecessors.includes(candidate.id)}
+                        disabled={successorIds.includes(candidate.id)}
+                        onChange={() => setPredecessors((current) => toggle(current, candidate.id))}
+                      />
+                      <span className="links__num num">#{numbers[candidate.id]}</span>
+                      <span className="links__name">{candidate.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <span className="hint">Ничего не зависит — задача на конце цепочки</span>
-            )}
+
+              <div className="links__col">
+                <span className="links__title">Зависят от этой</span>
+                <div className="deps">
+                  {candidates.length === 0 && <span className="hint">Ничего не найдено</span>}
+                  {candidates.map((candidate) => (
+                    <label key={candidate.id} className="frox-toggle-label">
+                      <input
+                        className="frox-checkbox"
+                        type="checkbox"
+                        checked={successorIds.includes(candidate.id)}
+                        disabled={predecessors.includes(candidate.id)}
+                        onChange={() => setSuccessorIds((current) => toggle(current, candidate.id))}
+                      />
+                      <span className="links__num num">#{numbers[candidate.id]}</span>
+                      <span className="links__name">{candidate.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <span className="hint">
+              Задача не может быть одновременно до и после другой — противоположный чекбокс
+              блокируется. Циклы отклоняет сервер.
+            </span>
           </div>
         </div>
 

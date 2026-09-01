@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Gantt, ViewMode, type Task as GanttTask } from "gantt-task-react";
 import { GripVertical } from "lucide-react";
 import "gantt-task-react/dist/index.css";
+import { STATUS_LABELS } from "../types";
 import type { ColumnKey, ColumnWidths, ScheduledTask, Schedule } from "../types";
 import { formatDate, formatDateNumeric } from "../format";
 import {
@@ -19,6 +20,9 @@ const COLORS = {
   normal: { bar: "#5b6172", progress: "#464b59" },
   pinned: { bar: "#f59e0b", progress: "#c27a06" },
   changed: { bar: "#50d1b2", progress: "#2fa78a" },
+  // готовая работа не должна спорить за внимание с тем, что впереди
+  done: { bar: "#2f4a35", progress: "#3cb043" },
+  blocked: { bar: "#e23738", progress: "#b81f20" },
 };
 
 // Высота календаря библиотеки и место под горизонтальный ползунок: без запаса
@@ -168,7 +172,11 @@ export function GanttBoard({
       schedule.tasks.map((task) => {
         const palette = changedSet.has(task.id)
           ? COLORS.changed
-          : task.is_critical
+          : task.status === "done"
+            ? COLORS.done
+            : task.status === "blocked"
+              ? COLORS.blocked
+              : task.is_critical
             ? COLORS.critical
             : task.is_pinned
               ? COLORS.pinned
@@ -219,6 +227,8 @@ export function GanttBoard({
     switch (key) {
       case "assignee":
         return task.assignee || "—";
+      case "status":
+        return STATUS_LABELS[task.status];
       case "duration":
         return task.duration_days;
       case "start":
@@ -271,6 +281,8 @@ export function GanttBoard({
         if (row.id === selectedId) classes.push("gantt-row--selected");
         if (changedSet.has(row.id)) classes.push("gantt-row--changed");
         if (dragId === row.id) classes.push("gantt-row--dragging");
+        if (task?.status === "done") classes.push("gantt-row--done");
+        if (task?.status === "blocked") classes.push("gantt-row--blocked");
         if (dropHint?.id === row.id) classes.push(`gantt-row--drop-${dropHint.position}`);
         return (
           <div
@@ -318,7 +330,11 @@ export function GanttBoard({
             {visibleColumns.map((column) => (
               <span
                 key={column.key}
-                className={`gantt-row__cell${column.key === "assignee" ? "" : " num"}`}
+                className={
+                  `gantt-row__cell` +
+                  (column.key === "assignee" || column.key === "status" ? "" : " num") +
+                  (column.key === "status" ? ` gantt-row__cell--status-${task?.status}` : "")
+                }
               >
                 {cellValue(task, column.key)}
               </span>

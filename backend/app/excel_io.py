@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from openpyxl import Workbook, load_workbook
 
-from .models import Plan, Task
+from .models import STATUS_LABELS, Plan, Task, TaskStatus
 
 # Columns written on export. The first five are the required input format;
 # the rest are computed and ignored when the file is imported back.
@@ -35,6 +35,7 @@ EXPORT_HEADER = [
     "зафиксировать с",
     "начало",
     "окончание",
+    "статус",
     "критический путь",
     "запас, дн",
     "прогресс, %",
@@ -66,6 +67,7 @@ _ALIASES: dict[str, set[str]] = {
         "deps",
     },
     "pin": {"зафиксировать с", "фиксация", "не раньше", "pin", "start no earlier than"},
+    "status": {"статус", "состояние", "status", "state"},
 }
 
 
@@ -194,6 +196,19 @@ def _as_date(value: Any, row_no: int, errors: list[str]) -> Optional[date]:
     return None
 
 
+def _as_status(value: Any, row_no: int, errors: list[str]) -> TaskStatus:
+    text = _as_text(value)
+    if not text:
+        return TaskStatus.PLANNED
+    from .ops import OpError, parse_status  # локальный импорт: ops зависит от нас
+
+    try:
+        return parse_status(text)
+    except OpError as exc:
+        errors.append(f"строка {row_no}: {exc}")
+        return TaskStatus.PLANNED
+
+
 def _split_predecessors(value: Any) -> list[str]:
     text = _as_text(value)
     if not text:
@@ -237,6 +252,7 @@ def plan_from_xlsx(blob: bytes, project_start: date, title: Optional[str] = None
             duration_days=_as_duration(_cell(row, columns.get("duration")), offset, errors),
             predecessors=[],
             start_no_earlier_than=_as_date(_cell(row, columns.get("pin")), offset, errors),
+            status=_as_status(_cell(row, columns.get("status")), offset, errors),
         )
         raw_rows.append((offset, task, _split_predecessors(_cell(row, columns.get("predecessors")))))
 
@@ -309,13 +325,14 @@ def plan_to_xlsx(plan: Plan) -> bytes:
                 task.start_no_earlier_than.isoformat() if task.start_no_earlier_than else "",
                 c.start.isoformat(),
                 c.end.isoformat(),
+                STATUS_LABELS[task.status],
                 "да" if c.is_critical else "",
                 c.slack_days,
                 task.progress,
             ]
         )
 
-    widths = [22, 38, 46, 18, 14, 34, 18, 14, 14, 18, 12, 14]
+    widths = [22, 38, 46, 18, 14, 34, 18, 14, 14, 18, 18, 12, 14]
     for idx, width in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
     ws.freeze_panes = "A2"

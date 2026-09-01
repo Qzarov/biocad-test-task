@@ -1,3 +1,14 @@
+export type TaskStatus = "planned" | "in_progress" | "done" | "blocked";
+
+export const STATUS_LABELS: Record<TaskStatus, string> = {
+  planned: "не начата",
+  in_progress: "в работе",
+  done: "готова",
+  blocked: "заблокирована",
+};
+
+export const STATUS_ORDER: TaskStatus[] = ["planned", "in_progress", "done", "blocked"];
+
 export interface PlanTask {
   id: string;
   name: string;
@@ -7,6 +18,7 @@ export interface PlanTask {
   predecessors: string[];
   start_no_earlier_than: string | null;
   progress: number;
+  status: TaskStatus;
 }
 
 export interface ScheduledTask {
@@ -17,6 +29,7 @@ export interface ScheduledTask {
   duration_days: number;
   predecessors: string[];
   progress: number;
+  status: TaskStatus;
   start: string;
   end: string;
   is_critical: boolean;
@@ -107,7 +120,14 @@ export interface ModelsResponse {
 }
 
 /** Колонки списка задач, которые можно скрывать. «Задача» есть всегда. */
-export type ColumnKey = "assignee" | "duration" | "start" | "end" | "slack" | "progress";
+export type ColumnKey =
+  | "assignee"
+  | "status"
+  | "duration"
+  | "start"
+  | "end"
+  | "slack"
+  | "progress";
 
 /** Ширины колонок списка. Ключ "name" — колонка «Задача». */
 export type ColumnWidths = Partial<Record<ColumnKey | "name", number>>;
@@ -115,6 +135,7 @@ export type ColumnWidths = Partial<Record<ColumnKey | "name", number>>;
 export interface TaskFilters {
   query: string;
   assignee: string;
+  status: TaskStatus | "";
   criticalOnly: boolean;
   pinnedOnly: boolean;
 }

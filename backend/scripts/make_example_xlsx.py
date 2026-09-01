@@ -20,6 +20,13 @@ from app.models import Plan, Task  # noqa: E402
 OUT = Path(__file__).resolve().parents[2] / "samples" / "example_plan.xlsx"
 
 # (id, name, assignee, duration, predecessors, description)
+# (id, статус, прогресс) — в примере показаны все состояния разом
+STATUSES = {
+    "layout": ("done", 100),
+    "permits": ("in_progress", 45),
+    "equipment-order": ("blocked", 0),
+}
+
 ROWS = [
     ("layout", "Проектирование участка", "Морозов И.", 14, [], "Планировка чистого помещения класса C, зонирование потоков."),
     ("permits", "Согласование с надзором", "Белова Н.", 21, ["layout"], "Пакет документов по чистым помещениям и вентиляции."),
@@ -48,6 +55,8 @@ def main() -> None:
                 assignee=assignee,
                 duration_days=duration,
                 predecessors=list(preds),
+                status=STATUSES.get(task_id, ("planned", 0))[0],
+                progress=STATUSES.get(task_id, ("planned", 0))[1],
             )
             for task_id, name, assignee, duration, preds, description in ROWS
         ],

@@ -210,3 +210,66 @@ def test_stale_number_loses_to_the_name_in_one_reference():
     """Ссылка «#1 «Вёрстка»» противоречива: номер устарел после переупорядочивания."""
     assert ops.resolve_task(base_plan(), "#1 «Вёрстка»").id == "verstka"
     assert ops.resolve_task(base_plan(), "3 «Анализ»").id == "analiz"
+
+
+def test_status_accepts_code_and_russian_label():
+    plan, msg = ops.update_task(base_plan(), "analiz", status="in_progress")
+    assert plan.task_by_id("analiz").status.value == "in_progress"
+    assert "в работе" in msg
+
+    plan, _ = ops.update_task(base_plan(), "analiz", status="готова")
+    assert plan.task_by_id("analiz").status.value == "done"
+
+
+def test_status_and_progress_stay_consistent():
+    # «готова» без прогресса подтягивает 100%
+    plan, msg = ops.update_task(base_plan(), "analiz", status="done")
+    assert plan.task_by_id("analiz").progress == 100 and "100%" in msg
+
+    # 100% без статуса делает задачу готовой
+    plan, msg = ops.update_task(base_plan(), "dizayn", progress=100)
+    assert plan.task_by_id("dizayn").status.value == "done"
+
+    # частичный прогресс переводит «не начата» в «в работе»
+    plan, _ = ops.update_task(base_plan(), "verstka", progress=30)
+    assert plan.task_by_id("verstka").status.value == "in_progress"
+
+    # явный прогресс сильнее выведенного
+    plan, _ = ops.update_task(base_plan(), "analiz", status="done", progress=80)
+    task = plan.task_by_id("analiz")
+    assert (task.status.value, task.progress) == ("done", 80)
+
+
+def test_status_planned_resets_progress():
+    plan, _ = ops.update_task(base_plan(), "analiz", progress=60)
+    plan, _ = ops.update_task(plan, "analiz", status="planned")
+    assert plan.task_by_id("analiz").progress == 0
+
+
+def test_unknown_status_is_rejected_with_the_allowed_list():
+    with pytest.raises(ops.OpError) as err:
+        ops.update_task(base_plan(), "analiz", status="почти готова")
+    assert "in_progress" in str(err.value)
+
+
+def test_set_successors_adds_and_removes_links():
+    # «Анализ» → зависят «Дизайн» (уже) и «Вёрстка» (добавим)
+    plan, msg = ops.set_successors(base_plan(), "analiz", ["Дизайн", "Вёрстка"])
+    assert plan.task_by_id("verstka").predecessors == ["dizayn", "analiz"]
+    assert "добавлены" in msg
+
+    # пустой список снимает зависимости от задачи
+    plan, msg = ops.set_successors(base_plan(), "analiz", [])
+    assert plan.task_by_id("dizayn").predecessors == []
+    assert "убраны" in msg
+
+
+def test_set_successors_rejects_a_cycle():
+    with pytest.raises(ops.OpError) as err:
+        ops.set_successors(base_plan(), "verstka", ["Анализ"])
+    assert "цикл" in str(err.value).lower()
+
+
+def test_set_successors_rejects_self():
+    with pytest.raises(ops.OpError):
+        ops.set_successors(base_plan(), "analiz", ["analiz"])

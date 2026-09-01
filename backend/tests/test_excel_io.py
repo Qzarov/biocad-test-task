@@ -153,3 +153,34 @@ def test_duplicate_ids_in_a_file_are_made_unique():
     )
     plan = plan_from_xlsx(data, project_start=date(2026, 1, 1))
     assert [t.id for t in plan.tasks] == ["dup", "dup-2"]
+
+
+def test_status_round_trips_through_excel():
+    plan = Plan(
+        project_start=date(2026, 5, 4),
+        tasks=[
+            Task(id="a", name="Анализ", duration_days=2, status="done", progress=100),
+            Task(id="b", name="Дизайн", duration_days=2, status="blocked", predecessors=["a"]),
+        ],
+    )
+    again = plan_from_xlsx(plan_to_xlsx(plan), project_start=date(2026, 5, 4))
+    assert [t.status.value for t in again.tasks] == ["done", "blocked"]
+
+
+def test_status_column_accepts_labels_and_codes():
+    data = make_xlsx(
+        [("A", "", "", 1, "", "в работе"), ("B", "", "", 1, "", "done"), ("C", "", "", 1, "", "")],
+        header=("задача", "описание", "исполнитель", "длительность", "предшественники", "статус"),
+    )
+    plan = plan_from_xlsx(data, project_start=date(2026, 1, 1))
+    assert [t.status.value for t in plan.tasks] == ["in_progress", "done", "planned"]
+
+
+def test_unknown_status_in_file_is_reported_with_the_row():
+    data = make_xlsx(
+        [("A", "", "", 1, "", "почти готово")],
+        header=("задача", "описание", "исполнитель", "длительность", "предшественники", "статус"),
+    )
+    with pytest.raises(ExcelImportError) as err:
+        plan_from_xlsx(data, project_start=date(2026, 1, 1))
+    assert "строка 2" in err.value.details[0]

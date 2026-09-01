@@ -85,7 +85,9 @@ export const api = {
       assignee?: string;
       duration_days?: number;
       progress?: number;
+      status?: string;
       predecessors?: string[];
+      successors?: string[];
       start?: string;
       unpin?: boolean;
     },

@@ -116,6 +116,7 @@ def schedule_plan(plan: Plan) -> Schedule:
             duration_days=t.duration_days,
             predecessors=list(t.predecessors),
             progress=t.progress,
+            status=t.status,
             start=start[t.id],
             end=end[t.id],
             slack_days=(latest_finish[t.id] - end[t.id]).days,

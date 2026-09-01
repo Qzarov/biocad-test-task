@@ -7,6 +7,7 @@ import type { ColumnKey, ColumnWidths } from "../types";
  *  может перетащить границу в шапке, и тогда его значение живёт в настройках. */
 export const OPTIONAL_COLUMNS: { key: ColumnKey; label: string; width: number }[] = [
   { key: "assignee", label: "Исполнитель", width: 124 },
+  { key: "status", label: "Статус", width: 120 },
   { key: "duration", label: "Дн.", width: 48 },
   { key: "start", label: "Начало", width: 96 },
   { key: "end", label: "Окончание", width: 96 },
@@ -21,6 +22,7 @@ export const NAME_COLUMN_WIDTH = 236;
 export const MIN_COLUMN_WIDTH: Record<ColumnKey | "name", number> = {
   name: 150,
   assignee: 80,
+  status: 92,
   duration: 44,
   start: 78,
   end: 78,

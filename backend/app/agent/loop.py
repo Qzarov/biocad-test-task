@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any, AsyncIterator, Optional
 
 from ..config import settings
-from ..models import Plan
+from ..models import STATUS_LABELS, Plan
 from ..scheduler import schedule_plan
 from ..seed import seed_plan
 from ..store import PlanStore
@@ -29,6 +29,7 @@ SYSTEM_PROMPT = """Ты — ассистент-планировщик проек
 - Массовые операции: если просят «перенеси всё, что после X», «переназначь задачи Петровой на Иванова» — вызывай инструменты столько раз, сколько нужно, и не спрашивай подтверждения.
 - Если инструмент вернул строку, начинающуюся с «ОШИБКА», не повторяй тот же вызов вслепую: прочитай причину, при необходимости вызови get_plan и исправь аргументы.
 - Даты — формат ГГГГ-ММ-ДД. Длительности — целые календарные дни.
+- Статус задачи: planned (не начата), in_progress (в работе), done (готова), blocked (заблокирована). Ставится через update_task; прогресс подтягивается автоматически, отдельно его указывать не нужно.
 - Зависимости всегда приоритетнее фиксации даты: задача не может начаться раньше, чем закончатся её предшественники.
 - В конце коротко (1–3 предложения) отчитайся, что именно изменилось. Без Markdown-таблиц и без списка всего плана.
 - Пользователь может ссылаться на задачу номером из списка («#5», «пятая») и на исполнителя через «@Имя» — это одно и то же, что название задачи или имя человека, инструменты понимают и номер, и название.
@@ -107,7 +108,7 @@ def render_plan_for_prompt(plan: Plan) -> str:
         f"Старт проекта: {schedule.project_start.isoformat()}, "
         f"окончание: {schedule.project_end.isoformat() if schedule.project_end else '—'}, "
         f"задач: {len(schedule.tasks)}",
-        "Текущий план (#номер | id | задача | исполнитель | дни | старт..финиш | предшественники):",
+        "Текущий план (#номер | id | задача | исполнитель | дни | старт..финиш | статус | предшественники):",
     ]
     for index, t in enumerate(schedule.tasks, start=1):
         preds = ", ".join(names.get(p, p) for p in t.predecessors) or "—"
@@ -115,7 +116,7 @@ def render_plan_for_prompt(plan: Plan) -> str:
         marks += " [дата закреплена]" if t.is_pinned else ""
         lines.append(
             f"#{index} | {t.id} | {t.name} | {t.assignee or '—'} | {t.duration_days} | "
-            f"{t.start.isoformat()}..{t.end.isoformat()} | {preds}{marks}"
+            f"{t.start.isoformat()}..{t.end.isoformat()} | {STATUS_LABELS[t.status]} | {preds}{marks}"
         )
     return "\n".join(lines)
 

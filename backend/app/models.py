@@ -10,9 +10,29 @@ the dependency graph. The only date a user (or the agent) may set explicitly is
 from __future__ import annotations
 
 from datetime import date
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class TaskStatus(str, Enum):
+    """Состояние работы. На расчёт дат не влияет — планировщик считает по
+    длительностям и зависимостям, а статус говорит, что происходит с задачей
+    сейчас."""
+
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+
+
+STATUS_LABELS: dict[TaskStatus, str] = {
+    TaskStatus.PLANNED: "не начата",
+    TaskStatus.IN_PROGRESS: "в работе",
+    TaskStatus.DONE: "готова",
+    TaskStatus.BLOCKED: "заблокирована",
+}
 
 
 class Task(BaseModel):
@@ -30,6 +50,7 @@ class Task(BaseModel):
         None, description="Manual pin: task may not start before this date"
     )
     progress: int = Field(0, ge=0, le=100, description="Completion percent")
+    status: TaskStatus = Field(TaskStatus.PLANNED, description="Состояние работы")
 
     @field_validator("predecessors")
     @classmethod
@@ -69,6 +90,7 @@ class ScheduledTask(BaseModel):
     duration_days: int
     predecessors: list[str]
     progress: int
+    status: TaskStatus
     start: date
     end: date
     is_critical: bool
