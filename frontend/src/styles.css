@@ -193,6 +193,23 @@ a.frox-btn {
   color: var(--accent-text) !important;
 }
 
+/* Источник плана — там же, где остальные факты о плане: раньше имя файла было
+   видно только в метке истории в подвале. */
+.stats__source {
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.stats__source svg {
+  color: var(--text-muted);
+}
+
+.stats__warning {
+  gap: 6px;
+  color: var(--admin-accent);
+  cursor: help;
+}
+
 .stats__date {
   padding: 2px 6px;
   border: 1px solid var(--border);
@@ -978,39 +995,20 @@ body.is-dragging-row * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 14px 18px 12px;
+  gap: 12px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border);
 }
 
-.chat__head {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.chat__head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 .chat__model-picker {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 10px;
-}
-
-.chat__model-label {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  max-width: 260px;
 }
 
 .chat__model-picker .frox-select {
-  padding: 7px 32px 7px 12px;
-  font-size: 13px;
+  padding: 6px 30px 6px 10px;
+  font-size: 12.5px;
 }
 
 .chat__title {
@@ -1401,37 +1399,6 @@ body.is-dragging-row * {
 .toast__close:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-/* --- строка состояния ----------------------------------------------------- */
-
-.statusbar {
-  display: flex;
-  align-items: center;
-  gap: 8px 20px;
-  flex-wrap: wrap;
-  padding: 9px 22px;
-  background: var(--bg-header);
-  border-top: 1px solid var(--border);
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-
-.statusbar__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-hover);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.statusbar__dot--off {
-  background: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-soft);
-}
-
-.statusbar__spacer {
-  flex: 1;
 }
 
 /* --- модалка ------------------------------------------------------------- */

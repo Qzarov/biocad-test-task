@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ViewMode } from "gantt-task-react";
-import { Redo2, Undo2 } from "lucide-react";
+import { FileSpreadsheet, Redo2, TriangleAlert, Undo2 } from "lucide-react";
 import { ApiError, api, sessionId, streamChat } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
 import { ColumnPicker, columnsWidth } from "./components/ColumnPicker";
@@ -10,7 +10,7 @@ import { EMPTY_FILTERS, TableFilter, applyFilters, isFilterActive } from "./comp
 import { TaskModal } from "./components/TaskModal";
 import { MIN_WINDOW_DAYS, TimeBrush } from "./components/TimeBrush";
 import { Toasts, type Toast } from "./components/Toasts";
-import { daysBetween, formatDateNumeric } from "./format";
+import { daysBetween, formatDateNumeric, plural } from "./format";
 import { loadPrefs, savePrefs } from "./prefs";
 import type {
   ChatEntry,
@@ -441,6 +441,22 @@ export default function App() {
               <b className="num">{assignees.size}</b>
               <span className="stats__label">исп.</span>
             </span>
+            <span
+              className="stats__item stats__source"
+              title={plan?.source ? `План загружен из файла ${plan.source}` : "Демо-план из шаблона"}
+            >
+              <FileSpreadsheet size={13} />
+              <span>{plan?.source || "демо-план"}</span>
+            </span>
+            {schedule?.warnings && schedule.warnings.length > 0 && (
+              <span
+                className="stats__item stats__warning"
+                title={schedule.warnings.join("\n")}
+              >
+                <TriangleAlert size={13} />
+                <span>{plural(schedule.warnings.length, "замечание", "замечания", "замечаний")}</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -617,23 +633,6 @@ export default function App() {
           onStop={() => abort.current?.abort()}
         />
       </div>
-
-      <footer className="statusbar">
-        <i className={`statusbar__dot${health?.llm_configured ? "" : " statusbar__dot--off"}`} />
-        <span>
-          {health?.llm_configured
-            ? `LLM: ${health.model} через MCP-инструменты`
-            : "LLM не настроен — чат недоступен"}
-        </span>
-        <span className="statusbar__spacer" />
-        {payload?.history?.length ? (
-          <span>
-            История: {payload.history.length} шаг(ов), текущий —{" "}
-            {payload.history.find((item) => item.is_current)?.label ?? "—"}
-          </span>
-        ) : null}
-        {schedule?.warnings?.length ? <span>Предупреждений: {schedule.warnings.length}</span> : null}
-      </footer>
 
       <Toasts toasts={toasts} onDismiss={dismissToast} />
 

@@ -129,13 +129,10 @@ export function ChatPanel({
   return (
     <section className="chat" aria-label="Чат с агентом-планировщиком">
       <header className="chat__head">
-        <div className="chat__head-row">
-          <div className="chat__title">Агент плана</div>
-        </div>
+        <div className="chat__title">Агент плана</div>
 
         {models.length > 0 ? (
           <label className="chat__model-picker">
-            <span className="chat__model-label">Модель</span>
             <select
               className="frox-select"
               value={model ?? ""}

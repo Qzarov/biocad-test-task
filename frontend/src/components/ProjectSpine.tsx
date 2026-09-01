@@ -69,13 +69,17 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
                 height={laneHeight}
                 rx={1}
                 fill={
-                  task.is_critical
-                    ? "var(--plan-critical)"
-                    : task.is_pinned
-                      ? "var(--plan-pinned)"
-                      : "var(--plan-normal)"
+                  // Заблокированная задача — сигнал проблемы, поэтому красный
+                  // перебивает и критический путь, и фиксацию даты.
+                  task.status === "blocked"
+                    ? "var(--danger)"
+                    : task.is_critical
+                      ? "var(--plan-critical)"
+                      : task.is_pinned
+                        ? "var(--plan-pinned)"
+                        : "var(--plan-normal)"
                 }
-                opacity={task.is_critical ? 1 : 0.85}
+                opacity={task.status === "blocked" || task.is_critical ? 1 : 0.85}
               />
             );
           })}
@@ -113,6 +117,9 @@ export function ProjectSpine({ schedule }: { schedule: Schedule }) {
         >
           <i className="legend-swatch" style={{ background: "var(--plan-pinned)" }} /> дата
           закреплена
+        </span>
+        <span className="legend-item" title="Задача со статусом «заблокирована»">
+          <i className="legend-swatch" style={{ background: "var(--danger)" }} /> заблокирована
         </span>
       </div>
     </div>

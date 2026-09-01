@@ -231,6 +231,7 @@ async def import_plan(
     title = file_title or Path(file.filename or "План проекта").stem
     try:
         plan = plan_from_xlsx(blob, project_start=start, title=title)
+        plan.source = (file.filename or "").strip()
     except ExcelImportError as exc:
         raise HTTPException(
             status_code=400, detail={"message": exc.message, "details": exc.details}

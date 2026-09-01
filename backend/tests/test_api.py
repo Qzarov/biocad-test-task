@@ -522,3 +522,19 @@ def test_a_new_edit_drops_the_redo_future(sid):
     # правка после отката обрезает будущее — как в любом редакторе
     client.patch("/api/plan/tasks/upstream", params={"session_id": sid}, json={"assignee": "Кто-то"})
     assert client.post("/api/plan/redo", params={"session_id": sid}).status_code == 409
+
+
+def test_import_remembers_the_source_file(sid):
+    files = {"file": ("Портфель Q3.xlsx", xlsx([("A", "", "", 1, "")]), "application/vnd.ms-excel")}
+    body = client.post("/api/plan/import", params={"session_id": sid}, files=files).json()
+    assert body["plan"]["source"] == "Портфель Q3.xlsx"
+
+    # имя файла переживает правку и откат
+    client.patch("/api/plan/tasks/a", params={"session_id": sid}, json={"duration_days": 5})
+    after_undo = client.post("/api/plan/undo", params={"session_id": sid}).json()
+    assert after_undo["plan"]["source"] == "Портфель Q3.xlsx"
+
+
+def test_demo_plan_has_no_source_file(sid):
+    body = client.post("/api/plan/reset", params={"session_id": sid}).json()
+    assert body["plan"]["source"] == ""

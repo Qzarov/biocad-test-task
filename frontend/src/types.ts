@@ -46,6 +46,7 @@ export interface Schedule {
 
 export interface Plan {
   title: string;
+  source: string;
   project_start: string;
   tasks: PlanTask[];
 }

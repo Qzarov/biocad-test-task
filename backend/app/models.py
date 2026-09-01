@@ -67,6 +67,9 @@ class Plan(BaseModel):
     """The whole plan: a title, a start date and the task list."""
 
     title: str = "План проекта"
+    # Имя файла, из которого план загружен. Пусто — значит это демо-план из сида.
+    # Живёт в плане, а не рядом: тогда оно переживает снимки, откат и экспорт.
+    source: str = ""
     project_start: date
     tasks: list[Task] = Field(default_factory=list)
 
