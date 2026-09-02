@@ -215,25 +215,37 @@ export function GanttBoard({
 
     // Одно событие scroll ловит все источники прокрутки: шкалу (проп viewDate),
     // колесо, наши жесты — библиотека всё сводит к этому элементу.
+    //
+    // Докладываем только изменившуюся позицию. Иначе получается цикл: рассказ о
+    // прокрутке поднимает состояние наверх, перерисовка меняет DOM внутри рамки,
+    // MutationObserver ниже видит мутации и снова зовёт attach — страница
+    // перерисовывалась без остановки (замерено: 1625 мутаций в секунду на
+    // простое), а на слабой машине это «Page unresponsive».
+    const last = { left: -1, viewport: -1 };
     const report = () => {
       const node = scroller.current;
-      if (node) onScroll?.({ left: node.scrollLeft, viewport: node.clientWidth });
+      if (!node) return;
+      const left = Math.round(node.scrollLeft);
+      const viewport = node.clientWidth;
+      if (left === last.left && viewport === last.viewport) return;
+      last.left = left;
+      last.viewport = viewport;
+      onScroll?.({ left, viewport });
     };
 
-    // Слушатель навешивается заново при каждом прогоне эффекта: раньше выход по
-    // «элемент тот же» случался до подписки, и после первой же перерисовки
-    // прокрутка перестала докладывать о себе — бегунок на спайне стоял на месте.
+    // Слушатель переезжает вместе с элементом: библиотека пересобирает разметку
+    // при смене масштаба, и найденный ранее скроллбар исчезает из документа.
+    let attached: HTMLElement | null = null;
     const attach = () => {
       const found = Array.from(element.querySelectorAll("div")).find(
         (candidate) => getComputedStyle(candidate).overflowX === "auto",
       );
-      if (!found) return;
-      if (found !== scroller.current) {
-        scroller.current = found as HTMLElement;
-        onViewport(found.clientWidth);
-      }
-      found.removeEventListener("scroll", report);
-      found.addEventListener("scroll", report, { passive: true });
+      if (!found || found === attached) return;
+      attached?.removeEventListener("scroll", report);
+      attached = found as HTMLElement;
+      scroller.current = attached;
+      attached.addEventListener("scroll", report, { passive: true });
+      onViewport(attached.clientWidth);
       report();
     };
 
@@ -248,7 +260,7 @@ export function GanttBoard({
     if (scroller.current) sizes.observe(scroller.current);
 
     return () => {
-      scroller.current?.removeEventListener("scroll", report);
+      attached?.removeEventListener("scroll", report);
       observer.disconnect();
       sizes.disconnect();
     };

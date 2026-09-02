@@ -77,6 +77,23 @@ export default function App() {
   const [viewport, setViewport] = useState(900);
   const [geometry, setGeometry] = useState({ originPx: 0, pxPerDay: 0 });
   const [scroll, setScroll] = useState({ left: 0, viewport: 0 });
+
+  // Замер и позиция прокрутки приходят объектами, и новый объект с теми же
+  // числами — это лишний рендер всего дерева. Сравниваем значения.
+  const applyGeometry = useCallback((next: { originPx: number; pxPerDay: number }) => {
+    setGeometry((current) =>
+      Math.abs(current.originPx - next.originPx) < 0.5 &&
+      Math.abs(current.pxPerDay - next.pxPerDay) < 0.01
+        ? current
+        : next,
+    );
+  }, []);
+
+  const applyScroll = useCallback((next: { left: number; viewport: number }) => {
+    setScroll((current) =>
+      current.left === next.left && current.viewport === next.viewport ? current : next,
+    );
+  }, []);
   // На узком экране список в полную ширину выдавливает таймлайн за край: двигать
   // диаграмму становится нечем. Поэтому там остаётся только колонка с названием,
   // и та ограничена по ширине; настройки колонок при этом не теряются.
@@ -305,10 +322,21 @@ export default function App() {
   );
   // На телефоне в режиме диаграммы колонки списка скрываются совсем: 200 пикселей
   // названий отнимали место у полос, а имя видно над полоской и в карточке.
-  const visibleColumns = narrow ? [] : prefs.columns;
-  const visibleWidths = narrow
-    ? { ...prefs.columnWidths, name: Math.min(168, prefs.columnWidths.name ?? 236) }
-    : prefs.columnWidths;
+  //
+  // Значения запоминаем: свежий литерал на каждый рендер перезапускал эффект
+  // замера геометрии внутри диаграммы, тот отдавал новый объект наверх, и всё
+  // крутилось по кругу шестнадцать раз в секунду на пустом экране.
+  const visibleColumns = useMemo<ColumnKey[]>(
+    () => (narrow ? [] : prefs.columns),
+    [narrow, prefs.columns],
+  );
+  const visibleWidths = useMemo(
+    () =>
+      narrow
+        ? { ...prefs.columnWidths, name: Math.min(168, prefs.columnWidths.name ?? 236) }
+        : prefs.columnWidths,
+    [narrow, prefs.columnWidths],
+  );
   const listWidth = columnsWidth(visibleColumns, visibleWidths);
 
   // Кнопки отмены и возврата ходят по той же истории снимков, что и агент:
@@ -706,8 +734,8 @@ export default function App() {
               numbers={taskNumbers}
               viewDate={viewDate}
               onViewport={setViewport}
-              onGeometry={setGeometry}
-              onScroll={setScroll}
+              onGeometry={applyGeometry}
+              onScroll={applyScroll}
               pxPerDay={pxPerDay}
               onPan={panDays}
               onColumnWidth={(key, width) =>
