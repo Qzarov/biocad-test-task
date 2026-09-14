@@ -328,8 +328,18 @@ export function GanttBoard({
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const target = event.target as HTMLElement | null;
-      // ручка ширины колонки и ручка переноса — свои жесты
-      if (!target || target.closest(".col-resizer") || target.closest(".gantt-row__grip")) return;
+      // ручка ширины колонки, ручка переноса строки и сама полоска задачи (тело,
+      // ручки дат, ручка прогресса — все они внутри общего <g class="bar">) —
+      // свои жесты: библиотека сама двигает/тянет задачу по своим mouse-обработчикам,
+      // и наш общий жест панорамирования не должен в это вмешиваться, иначе
+      // перетаскивание задачи попутно листает саму диаграмму.
+      if (
+        !target ||
+        target.closest(".col-resizer") ||
+        target.closest(".gantt-row__grip") ||
+        target.closest("g.bar")
+      )
+        return;
 
       panning = true;
       axis = null;
