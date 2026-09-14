@@ -1,0 +1,18 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+backend/data/
+backend/.env
+.pytest_cache/
+
+# node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# tooling
+.DS_Store
+*.log
+.claude/worktrees/

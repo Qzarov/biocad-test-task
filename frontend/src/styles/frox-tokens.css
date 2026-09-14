@@ -1,0 +1,149 @@
+/* Frox Design System — переменные палитры и тем.
+ *
+ * Скопировано из канонического источника (админки wf-panel,
+ * src/assets/main.css) без изменений значений: приложение должно выглядеть
+ * ровно так же, как остальные продукты, а не «примерно так же».
+ *
+ * Тема переключается атрибутом data-theme на <html> (и/или классом .dark,
+ * который ожидают примитивы frox.css).
+ */
+
+/* ===== Frox Design System Variables ===== */
+:root {
+  --color-brands: #228B22;
+
+  --gray-0: #ffffff;
+  --gray-100: #f5f5fa;
+  --gray-200: #e2e2ea;
+  --gray-300: #c6cbd9;
+  --gray-400: #9a9aaf;
+  --gray-500: #7e7e8f;
+  --gray-600: #656575;
+  --gray-700: #535362;
+  --gray-800: #2e2e3a;
+  --gray-900: #262631;
+  --gray-1000: #16161e;
+  --gray-1100: #07070c;
+
+  --neutral-bg: #ffffff;
+  --neutral-accent: #e8edf2;
+
+  --dark-gray-0: #000000;
+  --dark-gray-100: #0f0f12;
+  --dark-gray-200: #1e1e24;
+  --dark-gray-300: #2c2c35;
+  --dark-gray-400: #767682;
+  --dark-gray-500: #9d9da8;
+  --dark-gray-600: #8a8a98;
+  --dark-gray-700: #9d9da8;
+  --dark-gray-800: #c0c0cc;
+  --dark-gray-900: #d0d0da;
+  --dark-gray-1000: #eaeaf4;
+  --dark-gray-1100: #f1f1f1;
+
+  --dark-neutral-bg: #1f2128;
+  --dark-neutral-border: #3a3d4a;
+
+  --blue-accent: #2775ff;
+  --green-accent: #50d1b2;
+  --violet-accent: #1a7a1a;
+  --orange-accent: #ec8c56;
+  --yellow-accent: #ece663;
+  --indigo-accent: #5415f1;
+  --emerald-accent: #5eea8d;
+  --fuchsia-accent: #dd50d6;
+  --red-accent: #e23738;
+  --sky-accent: #0bd6f4;
+  --pink-accent: #fb7bb8;
+
+  --bg-1: #eae4e9;
+  --bg-2: #fff3ea;
+  --bg-3: #fde2e4;
+  --bg-4: #fad2e1;
+  --bg-5: #dbece5;
+  --bg-6: #bee1e6;
+  --bg-7: #f0efeb;
+  --bg-8: #dfe7fd;
+  --bg-9: #d1ecfd;
+  --bg-10: #d4edda;
+}
+
+/* ===== Light Theme ===== */
+[data-theme="light"], :root {
+  --bg-body: #f8f9fc;
+  --bg-surface: #ffffff;
+  --bg-input: #f5f5fa;
+  --bg-header: #ffffff;
+  --bg-tab-content: #f8f9fc;
+  --text-header: #07070c;
+  --bg-surface-alt: #fafafa;
+  --bg-hover: rgba(0,0,0,0.02);
+  --text-primary: #07070c;
+  --text-body: #2e2e3a;
+  --text-secondary: #656575;
+  --text-muted: #9a9aaf;
+  --accent: #228B22;
+  --accent-hover: #1a7a1a;
+  --accent-soft: rgba(34,139,34,0.12);
+  --accent-text: #228B22;
+  --admin-accent: #d97706;
+  --admin-accent-soft: rgba(217,119,6,0.12);
+  --danger: #e23738;
+  --danger-soft: rgba(226,55,56,0.08);
+  --danger-border: rgba(226,55,56,0.2);
+  --success: #50d1b2;
+  --success-soft: rgba(80,209,178,0.1);
+  --success-border: rgba(80,209,178,0.2);
+  --border: #e8edf2;
+  --border-input: #c6cbd9;
+  --btn-secondary-bg: #f5f5fa;
+  --btn-secondary-hover: #e2e2ea;
+  --btn-secondary-border: #e2e2ea;
+  --gradient-hero-from: #f8f9fc;
+  --gradient-hero-to: #ffffff;
+  --gradient-title-from: #228B22;
+  --gradient-title-to: #3cb043;
+  --superadmin-soft: rgba(226,55,56,0.1);
+  --superadmin-text: #e23738;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* ===== Dark Theme ===== */
+[data-theme="dark"], .dark {
+  --bg-body: #0f0f12;
+  --bg-surface: #1f2128;
+  --bg-input: #181a20;
+  --bg-header: #1f2128;
+  --bg-tab-content: #1f2128;
+  --text-header: #f1f1f1;
+  --bg-surface-alt: #1a1a20;
+  --bg-hover: rgba(255,255,255,0.04);
+  --text-primary: #f1f1f1;
+  --text-body: #c0c0cc;
+  --text-secondary: #9d9da8;
+  --text-muted: #767682;
+  --accent: #228B22;
+  --accent-hover: #3cb043;
+  --accent-soft: rgba(34,139,34,0.19);
+  --accent-text: #3cb043;
+  --admin-accent: #f59e0b;
+  --admin-accent-soft: rgba(245,158,11,0.19);
+  --danger: #e23738;
+  --danger-soft: rgba(226,55,56,0.13);
+  --danger-border: rgba(226,55,56,0.27);
+  --success: #50d1b2;
+  --success-soft: rgba(80,209,178,0.13);
+  --success-border: rgba(80,209,178,0.27);
+  --border: #3a3d4a;
+  --border-input: #454860;
+  --btn-secondary-bg: #1f2128;
+  --btn-secondary-hover: #2c2c35;
+  --btn-secondary-border: #3a3d4a;
+  --gradient-hero-from: #1f2128;
+  --gradient-hero-to: #0f0f12;
+  --gradient-title-from: #228B22;
+  --gradient-title-to: #3cb043;
+  --superadmin-soft: rgba(226,55,56,0.19);
+  --superadmin-text: #f87171;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+}

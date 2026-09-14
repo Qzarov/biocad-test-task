@@ -1,0 +1,262 @@
+/**
+ * Frox Design System — UI primitives.
+ *
+ * Canonical source. Все админки (wf-panel, будущие инстансы) должны
+ * импортировать ЭТОТ файл, а не дублировать его у себя в scoped-стилях.
+ *
+ * Зависит от CSS-переменных, определённых в админке:
+ *   --color-brands, --gray-{100..1100}, --dark-gray-{100..1100},
+ *   --neutral-bg, --neutral-accent, --dark-neutral-bg, --dark-neutral-border,
+ *   --bg-input, --border-input, --text-primary, --text-body.
+ *
+ * Темнота переключается классом `.dark` на <html>.
+ */
+
+/* ===================== Tabs ===================== */
+.frox-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--neutral-accent);
+}
+.dark .frox-tabs { border-color: var(--dark-neutral-border); }
+
+.frox-tab {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-500);
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+}
+.dark .frox-tab { color: var(--dark-gray-500); }
+.frox-tab:hover { color: var(--gray-1100); }
+.dark .frox-tab:hover { color: var(--dark-gray-1100); }
+
+.frox-tab-active {
+  color: var(--color-brands);
+  border-bottom-color: var(--color-brands);
+  font-weight: 600;
+}
+.dark .frox-tab-active { color: var(--color-brands); }
+
+.frox-tab-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  font-weight: 600;
+}
+.dark .frox-tab-badge { background: var(--dark-gray-200); color: var(--dark-gray-500); }
+
+.frox-tab-badge-accent {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--color-brands);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ===================== Card ===================== */
+.frox-card {
+  border-radius: 16px;
+  border: 1px solid var(--neutral-accent);
+  background: var(--neutral-bg);
+}
+.dark .frox-card {
+  border-color: var(--dark-neutral-border);
+  background: var(--dark-neutral-bg);
+}
+
+/* ===================== Buttons ===================== */
+.frox-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.frox-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.frox-btn-sm { padding: 7px 14px; font-size: 13px; }
+
+.frox-btn-brand {
+  background: var(--color-brands);
+  color: #fff;
+  border: 2px solid var(--color-brands);
+}
+.frox-btn-brand:hover:not(:disabled) { opacity: 0.9; }
+
+.frox-btn-outline {
+  background: transparent;
+  color: var(--gray-500);
+  border: 1px solid var(--neutral-accent);
+}
+.dark .frox-btn-outline {
+  color: var(--dark-gray-500);
+  border-color: var(--dark-neutral-border);
+}
+.frox-btn-outline:hover:not(:disabled) {
+  background: var(--gray-100);
+  color: var(--gray-800);
+}
+.dark .frox-btn-outline:hover:not(:disabled) {
+  background: var(--dark-gray-200);
+  color: var(--dark-gray-900);
+}
+
+.frox-btn-danger {
+  color: var(--red-accent);
+  border-color: var(--red-accent);
+}
+.frox-btn-danger:hover:not(:disabled) {
+  background: var(--red-accent);
+  color: #fff;
+}
+
+/* ===================== Form: input / textarea ===================== */
+.frox-input,
+.frox-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--gray-1100);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.frox-textarea { resize: vertical; line-height: 1.5; }
+.dark .frox-input,
+.dark .frox-textarea { color: var(--dark-gray-1100); }
+.frox-input:focus,
+.frox-textarea:focus { border-color: var(--color-brands); }
+.frox-input::placeholder,
+.frox-textarea::placeholder { color: var(--gray-400); }
+.dark .frox-input::placeholder,
+.dark .frox-textarea::placeholder { color: var(--dark-gray-500); }
+
+/* Browser autofill: не давать chrome подсовывать жёлтый/белый фон.
+   Перекрашиваем через inset shadow + сохраняем цвет текста. */
+.frox-input:-webkit-autofill,
+.frox-input:-webkit-autofill:hover,
+.frox-input:-webkit-autofill:focus,
+.frox-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset !important;
+  -webkit-text-fill-color: var(--gray-1100) !important;
+  caret-color: var(--gray-1100);
+  transition: background-color 9999s ease-in-out 0s;
+}
+.dark .frox-input:-webkit-autofill,
+.dark .frox-input:-webkit-autofill:hover,
+.dark .frox-input:-webkit-autofill:focus,
+.dark .frox-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--dark-gray-1100) !important;
+  caret-color: var(--dark-gray-1100);
+}
+
+/* ===================== Select ===================== */
+.frox-select {
+  width: 100%;
+  padding: 10px 38px 10px 14px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background-color: var(--bg-input);
+  color: var(--gray-1100);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z' clip-rule='evenodd' /%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+}
+.frox-select:focus { border-color: var(--color-brands); }
+.frox-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.dark .frox-select {
+  color: var(--dark-gray-1100);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239ca3af'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z' clip-rule='evenodd' /%3E%3C/svg%3E");
+}
+.frox-select option { background: var(--bg-input); color: var(--gray-1100); }
+.dark .frox-select option { background: var(--dark-neutral-bg); color: var(--dark-gray-1100); }
+
+/* ===================== Form: field wrapper ===================== */
+.frox-field { margin-bottom: 8px; }
+.frox-field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-500);
+  margin-bottom: 6px;
+}
+.dark .frox-field-label { color: var(--dark-gray-500); }
+
+/* ===================== Form: toggle (checkbox) ===================== */
+.frox-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-1100);
+}
+.dark .frox-toggle-label { color: var(--dark-gray-1100); }
+.frox-checkbox { accent-color: var(--color-brands); cursor: pointer; }
+
+/* ===================== Empty state ===================== */
+.frox-empty {
+  text-align: center;
+  color: var(--gray-400);
+  padding: 32px;
+  font-size: 14px;
+}
+.dark .frox-empty { color: var(--dark-gray-400); }
+
+/* ===================== Prompt variables hint box ===================== */
+.frox-prompt-vars {
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(127, 127, 127, 0.07);
+  border-left: 3px solid rgba(127, 127, 127, 0.35);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--gray-500);
+}
+.frox-prompt-vars-title { font-weight: 600; color: var(--text-primary); margin-right: 0.25rem; }
+.frox-prompt-vars code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.16);
+  color: var(--text-body);
+}
+
+/* ===================== Typography helpers ===================== */
+.text-header-7 { font-size: 16px; line-height: 22px; }
+.text-mini-desc { font-size: 12px; line-height: 16px; }
+
