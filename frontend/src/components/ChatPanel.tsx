@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatEntry, Health, Mention, ModelInfo, ToolTrace } from "../types";
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Send, Square, X } from "lucide-react";
+import { Maximize2, Minimize2, Send, Square, X } from "lucide-react";
 import { Collapsible } from "./Collapsible";
 
 const SUGGESTIONS = [
@@ -36,11 +36,9 @@ interface Props {
   model: string | null;
   mentions: Mention[];
   onModelChange: (model: string) => void;
-  collapsed: boolean;
   expanded: boolean;
   /** Мобильный режим: панель выезжает поверх плана и закрывается крестиком. */
   sheet?: boolean;
-  onToggle: () => void;
   onToggleExpand: () => void;
   onSend: (message: string) => void;
   onStop: () => void;
@@ -55,10 +53,8 @@ export function ChatPanel({
   model,
   mentions,
   onModelChange,
-  collapsed,
   expanded,
   sheet = false,
-  onToggle,
   onToggleExpand,
   onSend,
   onStop,
@@ -151,25 +147,11 @@ export function ChatPanel({
 
   return (
     <section
-      className={`chat${collapsed ? " chat--collapsed" : ""}${expanded ? " chat--expanded" : ""}${
-        sheet ? " chat--sheet" : ""
-      }`}
+      className={`chat${expanded ? " chat--expanded" : ""}${sheet ? " chat--sheet" : ""}`}
       aria-label="Чат с агентом-планировщиком"
     >
       <header className="chat__head">
-        {sheet ? (
-          <span className="chat__title">Агент плана</span>
-        ) : (
-          <button
-            className="chat__toggle"
-            onClick={onToggle}
-            aria-expanded={!collapsed}
-            title={collapsed ? "Развернуть чат" : "Свернуть чат, чтобы не мешал диаграмме"}
-          >
-            {collapsed ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-            <span className="chat__title">Агент плана</span>
-          </button>
-        )}
+        <span className="chat__title">Агент плана</span>
 
         <div className="chat__head-right">
           {models.length > 0 ? (

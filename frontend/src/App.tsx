@@ -119,9 +119,6 @@ export default function App() {
   // На телефоне чат по умолчанию свёрнут: развёрнутый он забирает половину
   // экрана у диаграммы, а открыть его — одно нажатие.
   const [chatExpanded, setChatExpanded] = useState(false);
-  const [chatCollapsed, setChatCollapsed] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches,
-  );
   const [busy, setBusy] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -420,7 +417,6 @@ export default function App() {
         { id: turnId, role: "agent", text: "", tools: [], pending: true },
       ]);
       setStreaming(true);
-      setChatCollapsed(false);
       abort.current = new AbortController();
 
       const patch = (update: (entry: ChatEntry) => ChatEntry) =>
@@ -796,18 +792,15 @@ export default function App() {
             model={prefs.model}
             mentions={mentions}
             loadingHistory={loadingHistory}
-            collapsed={!narrow && chatCollapsed && !chatExpanded}
             expanded={chatExpanded}
             sheet={narrow}
             onModelChange={(model) => setPrefs((current) => ({ ...current, model }))}
-            onToggle={() => setChatCollapsed((value) => !value)}
             onToggleExpand={() => {
               if (narrow) {
                 setChatExpanded(false);
                 return;
               }
               setChatExpanded((value) => !value);
-              setChatCollapsed(false);
             }}
             onSend={sendMessage}
             onStop={() => abort.current?.abort()}

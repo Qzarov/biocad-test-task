@@ -1185,30 +1185,6 @@ body.is-dragging-row * {
   border-bottom: 1px solid var(--border);
 }
 
-/* Свёрнутый чат оставляет только свою шапку: диаграмма получает весь экран, а
-   развернуть — одно нажатие. */
-.chat__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--text-primary);
-}
-
-.chat__toggle svg {
-  color: var(--text-muted);
-}
-
-.chat__toggle:hover svg {
-  color: var(--accent-text);
-}
-
-.chat--collapsed {
-  min-height: 0;
-}
-
 /* Раскрытый агент занимает весь экран: чат — основной инструмент правок, и
    иногда нужен целиком, а не полосой сбоку. */
 .chat--expanded {
@@ -1264,12 +1240,6 @@ body.is-dragging-row * {
   max-width: 900px;
   width: 100%;
   margin: 0 auto;
-}
-
-.chat--collapsed .chat__log,
-.chat--collapsed .chat__composer,
-.chat--collapsed .notice {
-  display: none;
 }
 
 .chat__head-right {
@@ -1578,6 +1548,13 @@ body.is-dragging-row * {
 .chat__send {
   flex: none;
   height: 38px;
+}
+
+/* На десктопе рядом с полем ввода подпись избыточна — иконки достаточно,
+   текст остаётся только в title/aria-label. На мобильном сайд-шите
+   возвращаем подпись ниже (@media 700px). */
+.chat__send .btn__label {
+  display: none;
 }
 
 .chat__hint {
@@ -1986,6 +1963,12 @@ body.is-dragging-row * {
 
   .btn__label {
     display: none;
+  }
+
+  /* На узком экране (sheet-режим агента) поле ввода и так занимает всю
+     ширину — подпись на кнопке отправки снова уместна. */
+  .chat__send .btn__label {
+    display: inline;
   }
 
   .masthead {
