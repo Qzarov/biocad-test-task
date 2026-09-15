@@ -19,7 +19,7 @@ const COLORS = {
   critical: { bar: "#3cb043", progress: "#228B22" },
   normal: { bar: "#5b6172", progress: "#464b59" },
   pinned: { bar: "#f59e0b", progress: "#c27a06" },
-  changed: { bar: "#50d1b2", progress: "#2fa78a" },
+  changed: { bar: "#2775ff", progress: "#1f5ecc" },
   // готовая работа не должна спорить за внимание с тем, что впереди
   done: { bar: "#2f4a35", progress: "#3cb043" },
   blocked: { bar: "#e23738", progress: "#b81f20" },

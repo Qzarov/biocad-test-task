@@ -3,6 +3,8 @@ import { ViewMode } from "gantt-task-react";
 import {
   Bot,
   Download,
+  Eye,
+  EyeOff,
   FileDown,
   FileSpreadsheet,
   Redo2,
@@ -124,7 +126,6 @@ export default function App() {
 
   const fileInput = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
-  const highlightTimer = useRef<number | null>(null);
   // Прокрутка диаграммы бывает двух видов: наша (окно шкалы двигает viewDate) и
   // пользовательская (ползунок под диаграммой, колесо). Различить их по событию
   // нельзя, поэтому после своей правки окна короткое время не слушаем скролл —
@@ -151,19 +152,20 @@ export default function App() {
     [pushToast],
   );
 
-  const highlight = useCallback((ids: string[]) => {
-    setChanged(ids);
-    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    highlightTimer.current = window.setTimeout(() => setChanged([]), 7000);
-  }, []);
+  // Тумблер «подсветка правок» сам решает, показывать ли changed — тут просто
+  // не игнорировать пустой список: без правок подсвечивать нечего.
+  const highlight = useCallback(
+    (ids: string[]) => setChanged(prefs.highlightEdits ? ids : []),
+    [prefs.highlightEdits],
+  );
 
   const run = useCallback(
-    async (action: () => Promise<PlanPayload>, options: { highlight?: boolean } = {}) => {
+    async (action: () => Promise<PlanPayload>) => {
       setBusy(true);
       try {
         const next = await action();
         setPayload(next);
-        if (options.highlight !== false) highlight(next.changed ?? []);
+        highlight(next.changed ?? []);
         if (next.message) pushToast({ kind: "info", message: next.message });
         return next;
       } catch (error) {
@@ -175,6 +177,14 @@ export default function App() {
     },
     [fail, highlight, pushToast],
   );
+
+  // Переключили тумблер — применяем его сразу к уже загруженному плану, а не
+  // только к следующей правке: включили — видно последнюю правку немедленно,
+  // выключили — подсветка сразу гаснет.
+  useEffect(() => {
+    setChanged(prefs.highlightEdits ? payload?.changed ?? [] : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.highlightEdits]);
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null));
@@ -189,7 +199,7 @@ export default function App() {
         );
       })
       .catch(() => setModels([]));
-    run(() => api.plan(), { highlight: false });
+    run(() => api.plan());
 
     // переписка живёт на сервере, поэтому после перезагрузки страницы её нужно
     // просто забрать: id ходов генерируем локально, они нужны только React
@@ -350,9 +360,9 @@ export default function App() {
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       event.preventDefault();
       if (event.shiftKey) {
-        if (canRedo) run(() => api.redo(), { highlight: false });
+        if (canRedo) run(() => api.redo());
       } else if (canUndo) {
-        run(() => api.undo(), { highlight: false });
+        run(() => api.undo());
       }
     };
     window.addEventListener("keydown", onKey);
@@ -559,7 +569,7 @@ export default function App() {
               event.target.value = "";
               if (file) {
                 setEntries([]);
-                run(() => api.importXlsx(file), { highlight: false });
+                run(() => api.importXlsx(file));
               }
             }}
           />
@@ -583,7 +593,7 @@ export default function App() {
           <span className="undo-pair">
             <button
               className="icon-btn"
-              onClick={() => run(() => api.undo(), { highlight: false })}
+              onClick={() => run(() => api.undo())}
               disabled={busy || streaming || !canUndo}
               title="Отменить последнюю правку (Ctrl+Z)"
               aria-label="Отменить"
@@ -592,7 +602,7 @@ export default function App() {
             </button>
             <button
               className="icon-btn"
-              onClick={() => run(() => api.redo(), { highlight: false })}
+              onClick={() => run(() => api.redo())}
               disabled={busy || streaming || !canRedo}
               title="Вернуть отменённую правку (Ctrl+Shift+Z)"
               aria-label="Вернуть"
@@ -600,6 +610,21 @@ export default function App() {
               <Redo2 size={15} />
             </button>
           </span>
+          <button
+            className={`icon-btn${prefs.highlightEdits ? " icon-btn--active" : ""}`}
+            onClick={() =>
+              setPrefs((current) => ({ ...current, highlightEdits: !current.highlightEdits }))
+            }
+            aria-pressed={prefs.highlightEdits}
+            title={
+              prefs.highlightEdits
+                ? "Подсветка правок включена: задачи последней правки (то, что отменит Undo) выделены голубым"
+                : "Подсветить последнюю правку — задачи, которые отменит Undo"
+            }
+            aria-label="Подсветка последней правки"
+          >
+            {prefs.highlightEdits ? <Eye size={15} /> : <EyeOff size={15} />}
+          </button>
           <a
             className="frox-btn frox-btn-outline"
             href={api.templateUrl()}

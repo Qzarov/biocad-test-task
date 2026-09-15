@@ -83,6 +83,20 @@ class Plan(BaseModel):
         raise KeyError(task_id)
 
 
+def diff_task_ids(before: Plan, after: Plan) -> list[str]:
+    """Ids of tasks whose fields differ between two plan snapshots.
+
+    A changed project start reschedules every task via CPM even though no
+    task's own fields moved, so that alone marks the whole plan changed.
+    """
+    old = {t.id: t.model_dump_json() for t in before.tasks}
+    new = {t.id: t.model_dump_json() for t in after.tasks}
+    changed = [tid for tid, payload in new.items() if old.get(tid) != payload]
+    if before.project_start != after.project_start:
+        changed = list(new)
+    return changed
+
+
 class ScheduledTask(BaseModel):
     """A task enriched with everything the Gantt chart needs to draw it."""
 

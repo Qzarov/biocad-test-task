@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from .models import Plan
+from .models import Plan, diff_task_ids
 
 DEFAULT_DB_PATH = Path(os.environ.get("PLAN_DB_PATH", "data/plans.sqlite3"))
 
@@ -170,6 +170,30 @@ class PlanStore:
                 return None, "Возвращать нечего — это последнее состояние плана"
             conn.execute("UPDATE sessions SET head_seq = ? WHERE id = ?", (target, session_id))
         return Plan.model_validate_json(snap["plan_json"]), f"Возврат к состоянию «{snap['label']}»"
+
+    def last_edit_diff(self, session_id: str) -> list[str]:
+        """Ids of tasks the current snapshot changed relative to the one before it.
+
+        This is exactly what clicking Undo would revert right now — computed
+        from the stored snapshots, so it survives a page reload and is correct
+        after undo/redo too, not just right after the edit that made it.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT head_seq FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if not row or row["head_seq"] <= 1:
+                return []
+            rows = conn.execute(
+                "SELECT seq, plan_json FROM snapshots WHERE session_id = ? AND seq IN (?, ?)",
+                (session_id, row["head_seq"], row["head_seq"] - 1),
+            ).fetchall()
+        by_seq = {r["seq"]: r["plan_json"] for r in rows}
+        prev_json = by_seq.get(row["head_seq"] - 1)
+        cur_json = by_seq.get(row["head_seq"])
+        if not prev_json or not cur_json:
+            return []
+        return diff_task_ids(Plan.model_validate_json(prev_json), Plan.model_validate_json(cur_json))
 
     def history(self, session_id: str) -> list[dict]:
         with self._conn() as conn:

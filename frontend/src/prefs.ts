@@ -16,6 +16,8 @@ export interface Prefs {
   /** Что показывать на телефоне: полосы или карточки. По умолчанию полосы. */
   mobileView: "chart" | "list";
   model: string | null;
+  /** Подсвечивать голубым задачи последней правки (то, что откатит Undo). */
+  highlightEdits: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -25,6 +27,7 @@ export const DEFAULT_PREFS: Prefs = {
   mobileStep: "week",
   mobileView: "chart",
   model: null,
+  highlightEdits: false,
 };
 
 export function loadPrefs(): Prefs {
@@ -46,6 +49,7 @@ export function loadPrefs(): Prefs {
         parsed.mobileStep === "day" || parsed.mobileStep === "month" ? parsed.mobileStep : "week",
       mobileView: parsed.mobileView === "list" ? "list" : "chart",
       model: typeof parsed.model === "string" ? parsed.model : null,
+      highlightEdits: parsed.highlightEdits === true,
     };
   } catch {
     return DEFAULT_PREFS;

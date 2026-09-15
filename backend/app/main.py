@@ -51,7 +51,11 @@ def resolve_session(session_id: Optional[str], header_value: Optional[str]) -> s
     return (session_id or header_value or "default").strip() or "default"
 
 
-def plan_payload(session_id: str, plan: Plan, changed: Optional[list[str]] = None) -> dict[str, Any]:
+def plan_payload(session_id: str, plan: Plan) -> dict[str, Any]:
+    """`changed` always means "what Undo would revert right now" — see
+    `PlanStore.last_edit_diff` — so every route that returns a plan (edit,
+    undo, redo, a plain refetch) agrees on the same answer.
+    """
     try:
         schedule = schedule_plan(plan)
     except PlanError as exc:
@@ -64,7 +68,7 @@ def plan_payload(session_id: str, plan: Plan, changed: Optional[list[str]] = Non
         "plan": json.loads(plan.model_dump_json()),
         "schedule": json.loads(schedule.model_dump_json()),
         "history": store.history(session_id),
-        "changed": changed or [],
+        "changed": store.last_edit_diff(session_id),
     }
 
 
@@ -73,17 +77,11 @@ def current_plan(session_id: str) -> Plan:
 
 
 def apply_edit(session_id: str, result: tuple[Plan, str], label: str) -> dict[str, Any]:
-    plan_before = current_plan(session_id)
     plan_after, message = result
     store.save_plan(session_id, plan_after, label)
-    payload = plan_payload(session_id, plan_after, changed=_diff_ids(plan_before, plan_after))
+    payload = plan_payload(session_id, plan_after)
     payload["message"] = message
     return payload
-
-
-def _diff_ids(before: Plan, after: Plan) -> list[str]:
-    old = {t.id: t.model_dump_json() for t in before.tasks}
-    return [t.id for t in after.tasks if old.get(t.id) != t.model_dump_json()]
 
 
 # --- request bodies --------------------------------------------------------

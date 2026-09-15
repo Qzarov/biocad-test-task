@@ -13,7 +13,10 @@
   --plan-critical: var(--accent-hover);
   --plan-normal: #5b6172;
   --plan-pinned: var(--admin-accent);
-  --plan-changed: var(--success);
+  /* Подсветка последней правки — отдельный синий, чтобы не путать её ни с
+     фирменным зелёным (критический путь), ни с бирюзовым --success. */
+  --plan-changed: var(--blue-accent);
+  --plan-changed-soft: rgba(39, 117, 255, 0.14);
 
   --radius-card: 16px;
   --radius-control: 10px;
@@ -239,6 +242,13 @@ a.frox-btn {
 .icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* Тумблер «подсветка правок»: включённое состояние держит акцентный фон
+   постоянно, а не только на hover — иначе не видно, что режим включён. */
+.icon-btn--active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
 .actions {
@@ -881,7 +891,7 @@ body.is-resizing * {
 }
 
 .gantt-row--changed {
-  background: var(--success-soft);
+  background: var(--plan-changed-soft);
 }
 
 /* Готовая задача отходит на второй план, заблокированная — наоборот заметна. */
@@ -1084,7 +1094,7 @@ body.is-dragging-row * {
 }
 
 .card--changed {
-  background: var(--success-soft);
+  background: var(--plan-changed-soft);
 }
 
 .card__stripe {

@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any, AsyncIterator, Optional
 
 from ..config import settings
-from ..models import STATUS_LABELS, Plan
+from ..models import STATUS_LABELS, Plan, diff_task_ids
 from ..scheduler import schedule_plan
 from ..seed import seed_plan
 from ..store import PlanStore
@@ -121,22 +121,13 @@ def render_plan_for_prompt(plan: Plan) -> str:
     return "\n".join(lines)
 
 
-def _changed_task_ids(before: Plan, after: Plan) -> list[str]:
-    old = {t.id: t.model_dump_json() for t in before.tasks}
-    new = {t.id: t.model_dump_json() for t in after.tasks}
-    changed = [tid for tid, payload in new.items() if old.get(tid) != payload]
-    if before.project_start != after.project_start:
-        changed = list(new)
-    return changed
-
-
 def plan_event(before: Plan, after: Plan) -> dict[str, Any]:
     schedule = schedule_plan(after)
     return {
         "type": "plan",
         "schedule": json.loads(schedule.model_dump_json()),
         "plan": json.loads(after.model_dump_json()),
-        "changed": _changed_task_ids(before, after),
+        "changed": diff_task_ids(before, after),
     }
 
 
