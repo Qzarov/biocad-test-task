@@ -62,10 +62,9 @@ class OpenAICompatibleLLM:
             "X-Title": settings.app_title,
         }
 
+        verify: bool | str = settings.llm_ca_bundle or True
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout, verify=settings.llm_verify_tls
-            ) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=verify) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions", json=payload, headers=headers
                 )
