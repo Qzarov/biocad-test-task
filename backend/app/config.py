@@ -20,6 +20,13 @@ class Settings:
     # LLM: any OpenAI-compatible endpoint; OpenRouter by default.
     llm_base_url: str = os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
     llm_api_key: str = os.environ.get("OPENROUTER_API_KEY", os.environ.get("LLM_API_KEY", ""))
+    # Для приватного релея с самоподписанным сертификатом (см. README/роадмап):
+    # проверку TLS отключаем явно и только по этому флагу, не глобально.
+    llm_verify_tls: bool = os.environ.get("LLM_VERIFY_TLS", "true").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
     llm_model: str = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-5")
     # Модели, которые разрешено выбирать в интерфейсе. Все из списка ниже
     # проверены на поддержку tool-calling — без него агент бесполезен.

@@ -63,7 +63,9 @@ class OpenAICompatibleLLM:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout, verify=settings.llm_verify_tls
+            ) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions", json=payload, headers=headers
                 )
